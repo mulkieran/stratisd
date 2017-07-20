@@ -183,10 +183,9 @@ impl StaticHeader {
         }
     }
 
-    /// Try to find a valid StaticHeader on a device.
-    /// If there is no StaticHeader on the device, return None.
-    /// If there is a problem reading a header, return an error.
-    fn setup<F>(f: &mut F) -> EngineResult<Option<StaticHeader>>
+
+    /// Read data from f into buffer of length _BDA_STATIC_HDR_SIZE.
+    fn read_into_buf<F>(f: &mut F) -> EngineResult<[u8; _BDA_STATIC_HDR_SIZE]>
         where F: Read + Seek
     {
         #![allow(unused_io_amount)]
@@ -195,8 +194,16 @@ impl StaticHeader {
 
         // FIXME: See https://github.com/stratis-storage/stratisd/pull/476
         f.read(&mut buf)?;
+        Ok(buf)
+    }
 
-        StaticHeader::setup_from_buf(&buf)
+    /// Try to find a valid StaticHeader on a device.
+    /// If there is no StaticHeader on the device, return None.
+    /// If there is a problem reading a header, return an error.
+    fn setup<F>(f: &mut F) -> EngineResult<Option<StaticHeader>>
+        where F: Read + Seek
+    {
+        StaticHeader::setup_from_buf(&StaticHeader::read_into_buf(f)?)
     }
 
     /// Try to find a valid StaticHeader in a buffer.
@@ -225,13 +232,7 @@ impl StaticHeader {
     pub fn determine_ownership<F>(f: &mut F) -> EngineResult<DevOwnership>
         where F: Read + Seek
     {
-        #![allow(unused_io_amount)]
-
-        f.seek(SeekFrom::Start(0))?;
-        let mut buf = [0u8; _BDA_STATIC_HDR_SIZE];
-
-        // FIXME: See https://github.com/stratis-storage/stratisd/pull/476
-        f.read(&mut buf)?;
+        let buf = StaticHeader::read_into_buf(f)?;
 
         // Using setup() as a test of ownership sets a high bar. It is
         // not sufficient to have STRAT_MAGIC to be considered "Ours",
