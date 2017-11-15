@@ -6,6 +6,7 @@ extern crate loopdev;
 
 use std::fs::OpenOptions;
 use std::io::{Seek, SeekFrom, Write};
+use std::panic;
 use std::path::{Path, PathBuf};
 
 use devicemapper::{Bytes, IEC, Sectors};
@@ -73,7 +74,6 @@ impl LoopTestDev {
 
 impl Drop for LoopTestDev {
     fn drop(&mut self) {
-        clean_up();
         self.detach()
     }
 }
@@ -104,7 +104,7 @@ fn get_devices(count: usize, dir: &TempDir) -> Vec<LoopTestDev> {
 
 /// Run the designated tests according to the specification.
 pub fn test_with_spec<F>(limits: DeviceLimits, test: F) -> ()
-    where F: Fn(&[&Path]) -> ()
+    where F: Fn(&[&Path]) -> () + panic::RefUnwindSafe
 {
     let counts = get_device_counts(limits);
 
@@ -115,6 +115,8 @@ pub fn test_with_spec<F>(limits: DeviceLimits, test: F) -> ()
         let loop_devices: Vec<LoopTestDev> = get_devices(count, &tmpdir);
         let device_paths: Vec<PathBuf> = loop_devices.iter().map(|x| x.get_path()).collect();
         let device_paths: Vec<&Path> = device_paths.iter().map(|x| x.as_path()).collect();
-        test(&device_paths);
+        let test_result = panic::catch_unwind(|| test(&device_paths));
+        clean_up();
+        test_result.unwrap();
     }
 }
