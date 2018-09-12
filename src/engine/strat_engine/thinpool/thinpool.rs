@@ -914,54 +914,56 @@ impl ThinPool {
         pool_name: &str,
         uuid: FilesystemUuid,
     ) -> StratisResult<()> {
-        match self.filesystems.remove_by_uuid(uuid) {
-            Some((fs_name, mut fs)) => {
-                let destroy_result = fs.destroy(&self.thin_pool);
-                if destroy_result.is_ok() {
-                    if let Err(err) = self.mdv.rm_fs(uuid) {
-                        error!("Could not remove metadata for fs with UUID {} and name {} belonging to pool {}, reason: {:?}",
+        let remove_result = self.filesystems.remove_by_uuid(uuid);
+        if remove_result.is_none() {
+            return Ok(());
+        }
+
+        let (fs_name, mut fs) = remove_result.expect("returned if remove_result.is_none()");
+
+        let destroy_result = fs.destroy(&self.thin_pool);
+        if destroy_result.is_ok() {
+            if let Err(err) = self.mdv.rm_fs(uuid) {
+                error!("Could not remove metadata for fs with UUID {} and name {} belonging to pool {}, reason: {:?}",
                                uuid,
                                fs_name,
                                pool_name,
                                err);
-                    }
-                    if let Err(err) = devlinks::filesystem_removed(pool_name, &fs_name) {
-                        error!("Could not remove devlinks for fs with UUID {} and name {} belonging to pool {}, reason: {:?}",
-                               uuid,
-                               fs_name,
-                               pool_name,
-                               err);
-                    }
-                    return Ok(());
-                }
-
-                let destroy_err = destroy_result.expect_err("just returned if destroy_result.is_ok()");
-
-                self.filesystems.insert(fs_name, uuid, fs);
-
-                let super_special_error: Option<StratisError> = match &destroy_err {
-                    &StratisError::DM(DmError::Core(ref dm_err)) => match dm_err.kind() {
-                        dm::errors::ErrorKind::IoctlError(_) => match &dm_err.cause() {
-                            &Some(ref cause) => {
-                                if cause.is::<nix::Error>() {
-                                    None
-                                } else {
-                                    None
-                                }
-                            }
-                            None => None,
-                        },
-                        _ => None,
-                    },
-                    _ => None,
-                };
-
-                match super_special_error {
-                    Some(_) => Err(destroy_err),
-                    None => Err(destroy_err),
-                }
             }
-            None => Ok(()),
+            if let Err(err) = devlinks::filesystem_removed(pool_name, &fs_name) {
+                error!("Could not remove devlinks for fs with UUID {} and name {} belonging to pool {}, reason: {:?}",
+                               uuid,
+                               fs_name,
+                               pool_name,
+                               err);
+            }
+            return Ok(());
+        }
+
+        let destroy_err = destroy_result.expect_err("just returned if destroy_result.is_ok()");
+
+        self.filesystems.insert(fs_name, uuid, fs);
+
+        let super_special_error: Option<StratisError> = match &destroy_err {
+            &StratisError::DM(DmError::Core(ref dm_err)) => match dm_err.kind() {
+                dm::errors::ErrorKind::IoctlError(_) => match &dm_err.cause() {
+                    &Some(ref cause) => {
+                        if cause.is::<nix::Error>() {
+                            None
+                        } else {
+                            None
+                        }
+                    }
+                    None => None,
+                },
+                _ => None,
+            },
+            _ => None,
+        };
+
+        match super_special_error {
+            Some(_) => Err(destroy_err),
+            None => Err(destroy_err),
         }
     }
 
