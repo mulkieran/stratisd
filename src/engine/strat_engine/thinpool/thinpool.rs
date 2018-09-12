@@ -8,8 +8,6 @@ use std;
 use std::borrow::BorrowMut;
 use std::error::Error;
 
-use nix;
-
 use uuid::Uuid;
 
 use devicemapper::{
@@ -944,26 +942,19 @@ impl ThinPool {
 
         self.filesystems.insert(fs_name, uuid, fs);
 
-        let super_special_error: Option<StratisError> = match &destroy_err {
-            &StratisError::DM(DmError::Core(ref dm_err)) => match dm_err.kind() {
-                dm::errors::ErrorKind::IoctlError(_) => match &dm_err.cause() {
-                    &Some(ref cause) => {
-                        if cause.is::<nix::Error>() {
-                            None
-                        } else {
-                            None
-                        }
+        match destroy_err {
+            StratisError::DM(DmError::Core(dm_err)) => match dm_err.kind() {
+                dm::errors::ErrorKind::IoctlError(_) => {
+                    let dm_err_cause = dm_err.cause();
+                    if dm_err_cause.is_none() {
+                        return Err(StratisError::DM(DmError::Core(dm_err)));
                     }
-                    None => None,
-                },
-                _ => None,
-            },
-            _ => None,
-        };
 
-        match super_special_error {
-            Some(_) => Err(destroy_err),
-            None => Err(destroy_err),
+                    Err(StratisError::DM(DmError::Core(dm_err)))
+                }
+                _ => Err(StratisError::DM(DmError::Core(dm_err))),
+            },
+            _ => Err(destroy_err),
         }
     }
 
