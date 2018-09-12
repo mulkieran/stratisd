@@ -6,14 +6,16 @@
 
 use std;
 use std::borrow::BorrowMut;
+use std::error::Error;
+
+use nix;
 
 use uuid::Uuid;
 
-use devicemapper as dm;
 use devicemapper::{
-    device_exists, Bytes, DataBlocks, Device, DmDevice, DmName, DmNameBuf, FlakeyTargetParams,
-    LinearDev, LinearDevTargetParams, LinearTargetParams, MetaBlocks, Sectors, TargetLine,
-    ThinDevId, ThinPoolDev, ThinPoolStatusSummary, IEC,
+    self as dm, device_exists, Bytes, DataBlocks, Device, DmDevice, DmError, DmName, DmNameBuf,
+    FlakeyTargetParams, LinearDev, LinearDevTargetParams, LinearTargetParams, MetaBlocks, Sectors,
+    TargetLine, ThinDevId, ThinPoolDev, ThinPoolStatusSummary, IEC,
 };
 
 use stratis::{ErrorEnum, StratisError, StratisResult};
@@ -933,7 +935,28 @@ impl ThinPool {
                 }
                 Err(err) => {
                     self.filesystems.insert(fs_name, uuid, fs);
-                    Err(err)
+
+                    let super_special_error: Option<StratisError> = match &err {
+                        &StratisError::DM(DmError::Core(ref dm_err)) => match dm_err.kind() {
+                            dm::errors::ErrorKind::IoctlError(_) => match &dm_err.cause() {
+                                &Some(ref cause) => {
+                                    if cause.is::<nix::Error>() {
+                                        None
+                                    } else {
+                                        None
+                                    }
+                                }
+                                None => None,
+                            },
+                            _ => None,
+                        },
+                        _ => None,
+                    };
+
+                    match super_special_error {
+                        Some(_) => Err(err),
+                        None => Err(err),
+                    }
                 }
             },
             None => Ok(()),
