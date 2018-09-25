@@ -217,6 +217,13 @@ impl Backstore {
 
                 let cache_tier = CacheTier::new(bdm);
 
+                let uuids = cache_tier
+                    .block_mgr
+                    .blockdevs()
+                    .iter()
+                    .map(|&(uuid, _)| uuid)
+                    .collect::<Vec<_>>();
+
                 let linear = self.linear
                     .take()
                     .expect("some space has already been allocated from the backstore => (cache_tier.is_none() <=> self.linear.is_some())");
@@ -224,13 +231,6 @@ impl Backstore {
                 let cache = make_cache(pool_uuid, &cache_tier, linear, true)?;
 
                 self.cache = Some(cache);
-
-                let uuids = cache_tier
-                    .block_mgr
-                    .blockdevs()
-                    .iter()
-                    .map(|&(uuid, _)| uuid)
-                    .collect::<Vec<_>>();
 
                 self.cache_tier = Some(cache_tier);
 
