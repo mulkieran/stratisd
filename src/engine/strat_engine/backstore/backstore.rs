@@ -186,12 +186,12 @@ impl Backstore {
         &mut self,
         pool_uuid: PoolUuid,
         paths: &[&Path],
-    ) -> StratisResult<Vec<DevUuid>> {
+    ) -> StratisResult<(Vec<DevUuid>, (bool, bool))> {
         match self.cache_tier {
             Some(ref mut cache_tier) => {
-                let (uuids, (_cache_change, _meta_change)) = cache_tier.add(pool_uuid, paths)?;
+                let (uuids, (cache_change, meta_change)) = cache_tier.add(pool_uuid, paths)?;
 
-                Ok(uuids)
+                Ok((uuids, (cache_change, meta_change)))
             }
             None => {
                 let bdm = BlockDevMgr::initialize(pool_uuid, paths, MIN_MDA_SECTORS)?;
@@ -207,7 +207,7 @@ impl Backstore {
 
                 self.cache_tier = Some(cache_tier);
 
-                Ok(uuids)
+                Ok((uuids, (true, true)))
             }
         }
     }
@@ -595,7 +595,7 @@ mod tests {
             .alloc(pool_uuid, &[INITIAL_BACKSTORE_ALLOCATION])
             .unwrap();
 
-        let cache_uuids = backstore.add_cachedevs(pool_uuid, initcachepaths).unwrap();
+        let (cache_uuids, (_, _)) = backstore.add_cachedevs(pool_uuid, initcachepaths).unwrap();
 
         invariant(&backstore);
 
@@ -622,7 +622,7 @@ mod tests {
         invariant(&backstore);
         assert_eq!(data_uuids.len(), datadevpaths.len());
 
-        let cache_uuids = backstore.add_cachedevs(pool_uuid, cachedevpaths).unwrap();
+        let (cache_uuids, (_, _)) = backstore.add_cachedevs(pool_uuid, cachedevpaths).unwrap();
         invariant(&backstore);
         assert_eq!(cache_uuids.len(), cachedevpaths.len());
 
