@@ -189,26 +189,7 @@ impl Backstore {
     ) -> StratisResult<Vec<DevUuid>> {
         match self.cache_tier {
             Some(ref mut cache_tier) => {
-                let (uuids, (cache_change, meta_change)) = cache_tier.add(pool_uuid, paths)?;
-
-                let mut cache_device = self.cache
-                    .as_mut()
-                    .expect("cache_tier.is_some() <=> self.cache.is_some()");
-
-                if cache_change {
-                    let table = map_to_dm(&cache_tier.cache_segments);
-                    cache_device.set_cache_table(get_dm(), table)?;
-                    cache_device.resume(get_dm())?;
-                }
-
-                // NOTE: currently CacheTier::add() does not ever update the
-                // meta segments. That means that this code is dead. But,
-                // when CacheTier::add() is fixed, this code will become live.
-                if meta_change {
-                    let table = map_to_dm(&cache_tier.meta_segments);
-                    cache_device.set_meta_table(get_dm(), table)?;
-                    cache_device.resume(get_dm())?;
-                }
+                let (uuids, (_cache_change, _meta_change)) = cache_tier.add(pool_uuid, paths)?;
 
                 Ok(uuids)
             }
@@ -223,14 +204,6 @@ impl Backstore {
                     .iter()
                     .map(|&(uuid, _)| uuid)
                     .collect::<Vec<_>>();
-
-                let linear = self.linear
-                    .take()
-                    .expect("some space has already been allocated from the backstore => (cache_tier.is_none() <=> self.linear.is_some())");
-
-                let cache = make_cache(pool_uuid, &cache_tier, linear, true)?;
-
-                self.cache = Some(cache);
 
                 self.cache_tier = Some(cache_tier);
 
