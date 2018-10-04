@@ -497,11 +497,9 @@ impl ThinPool {
                     // If a pool is in ReadOnly mode it is due to either meta data full or
                     // the pool requires repair.
                     ThinPoolStatusSummary::ReadOnly => {
-                        error!("Thinpool read only! -> ReadOnly");
                         self.set_state(PoolState::ReadOnly);
                     }
                     ThinPoolStatusSummary::OutOfSpace => {
-                        error!("Thinpool out of space! -> OutOfSpace");
                         self.set_state(PoolState::OutOfDataSpace);
                     }
                 }
@@ -585,7 +583,6 @@ impl ThinPool {
                 self.set_extend_state(data_extend_failed, meta_extend_failed);
             }
             dm::ThinPoolStatus::Fail => {
-                error!("Thinpool status is fail -> Failed");
                 self.set_state(PoolState::Failed);
                 // TODO: Take pool offline?
                 // TODO: Run thin_check
@@ -609,6 +606,14 @@ impl ThinPool {
     fn set_state(&mut self, new_state: PoolState) {
         if self.state() != new_state {
             self.pool_state = new_state;
+            match self.pool_state {
+                PoolState::Initializing | PoolState::Running | PoolState::Stopping => {
+                    info!("Setting pool state to {:?}", self.pool_state)
+                }
+                PoolState::OutOfDataSpace | PoolState::ReadOnly | PoolState::Failed => {
+                    error!("Setting pool state to {:?}", self.pool_state)
+                }
+            }
             get_engine_listener_list().notify(&EngineEvent::PoolStateChanged {
                 dbus_path: self.get_dbus_path(),
                 state: new_state,
