@@ -521,6 +521,10 @@ impl ThinPool {
                     false,
                 ) {
                     match self.extend_thin_meta_device(pool_uuid, backstore, request) {
+                        Ok(Sectors(0)) => {
+                            warn!("meta device fully extended, cannot extend further");
+                            meta_extend_failed = true;
+                        }
                         Ok(extend_size) => {
                             info!("Extended thin meta device by {}", extend_size);
                             should_save = true;
