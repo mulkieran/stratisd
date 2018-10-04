@@ -273,7 +273,7 @@ impl Pool for StratPool {
     ) -> StratisResult<Vec<(&'b str, FilesystemUuid)>> {
         let names: HashMap<_, _> = HashMap::from_iter(specs.iter().map(|&tup| (tup.0, tup.1)));
         for name in names.keys() {
-            if self.thin_pool.get_mut_filesystem_by_name(*name).is_some() {
+            if self.thin_pool.get_filesystem_by_name(*name).is_some() {
                 return Err(StratisError::Engine(
                     ErrorEnum::AlreadyExists,
                     name.to_string(),
