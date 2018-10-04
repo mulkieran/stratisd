@@ -488,8 +488,8 @@ impl ThinPool {
         let thinpool: dm::ThinPoolStatus = self.thin_pool.status(get_dm())?;
         match thinpool {
             dm::ThinPoolStatus::Working(ref status) => {
-                let mut meta_extend_failed = false;
-                let mut data_extend_failed = false;
+                let mut meta_extend_status = Ok(Sectors(0));
+                let mut data_extend_status = Ok(Sectors(0));
                 match status.summary {
                     ThinPoolStatusSummary::Good => {
                         self.set_state(PoolState::Running);
@@ -520,52 +520,48 @@ impl ThinPool {
                     meta_lowater.sectors(),
                     false,
                 ) {
-                    match self.extend_thin_meta_device(pool_uuid, backstore, request) {
-                        Ok(Sectors(0)) => {
-                            warn!("meta device fully extended, cannot extend further");
-                            meta_extend_failed = true;
-                        }
-                        Ok(extend_size) => {
-                            info!("Extended thin meta device by {}", extend_size);
-                            should_save = true;
-                        }
-                        Err(err) => {
-                            meta_extend_failed = true;
-                            error!("Thinpool meta extend failed! -> reason {:?}", err);
-                        }
+                    meta_extend_status =
+                        self.extend_thin_meta_device(pool_uuid, backstore, request);
+                }
+
+                match meta_extend_status {
+                    Ok(Sectors(0)) => {
+                        warn!("meta device fully extended, cannot extend further");
+                    }
+                    Ok(extend_size) => {
+                        info!("Extended thin meta device by {}", extend_size);
+                        should_save = true;
+                    }
+                    Err(err) => {
+                        error!("Thinpool meta extend failed! -> reason {:?}", err);
                     }
                 }
 
-                let extend_size = {
-                    match calculate_extension_request(
-                        datablocks_to_sectors(usage.total_data),
-                        datablocks_to_sectors(usage.used_data),
-                        datablocks_to_sectors(self.thin_pool.table().table.params.low_water_mark),
-                        true,
-                    ) {
-                        None => DataBlocks(0),
-                        Some(request) => {
-                            match self.extend_thin_data_device(pool_uuid, backstore, request) {
-                                Ok(Sectors(0)) => {
-                                    warn!("data device fully extended, cannot extend further");
-                                    data_extend_failed = true;
-                                    DataBlocks(0)
-                                }
-                                Ok(extend_size) => {
-                                    info!("Extended thin data device by {}", extend_size);
-                                    should_save = true;
-                                    sectors_to_datablocks(extend_size)
-                                }
-                                Err(err) => {
-                                    data_extend_failed = true;
-                                    error!(
-                                        "Thinpool data extend failed! -> Warning: reason: {:?}",
-                                        err
-                                    );
-                                    DataBlocks(0)
-                                }
-                            }
-                        }
+                if let Some(request) = calculate_extension_request(
+                    datablocks_to_sectors(usage.total_data),
+                    datablocks_to_sectors(usage.used_data),
+                    datablocks_to_sectors(self.thin_pool.table().table.params.low_water_mark),
+                    true,
+                ) {
+                    data_extend_status =
+                        self.extend_thin_data_device(pool_uuid, backstore, request);
+                }
+
+                let extend_size = match data_extend_status {
+                    Ok(Sectors(0)) => {
+                        warn!("data device fully extended, cannot extend further");
+                        DataBlocks(0)
+                    }
+                    Ok(extend_size) => {
+                        info!("Extended thin data device by {}", extend_size);
+                        should_save = true;
+                        sectors_to_datablocks(extend_size)
+                    }
+                    Err(err) => {
+                        error!("Thinpool data extend failed! -> Warning: reason: {:?}", err);
+
+                        error!("");
+                        DataBlocks(0)
                     }
                 };
 
@@ -587,7 +583,7 @@ impl ThinPool {
 
                 self.thin_pool.set_low_water_mark(get_dm(), lowater)?;
                 self.resume()?;
-                self.set_extend_state(data_extend_failed, meta_extend_failed);
+                self.set_extend_state(data_extend_status, meta_extend_status);
             }
             dm::ThinPoolStatus::Fail => {
                 error!("Thinpool status is fail -> Failed");
@@ -621,13 +617,17 @@ impl ThinPool {
         }
     }
 
-    fn set_extend_state(&mut self, data_extend_failed: bool, meta_extend_failed: bool) {
+    fn set_extend_state(
+        &mut self,
+        data_extend_status: StratisResult<Sectors>,
+        meta_extend_status: StratisResult<Sectors>,
+    ) {
         let mut new_state = PoolExtendState::Good;
-        if data_extend_failed && meta_extend_failed {
+        if data_extend_status.is_err() && meta_extend_status.is_err() {
             new_state = PoolExtendState::MetaAndDataFailed
-        } else if data_extend_failed {
+        } else if data_extend_status.is_err() {
             new_state = PoolExtendState::DataFailed;
-        } else if meta_extend_failed {
+        } else if meta_extend_status.is_err() {
             new_state = PoolExtendState::MetaFailed;
         }
         if self.extend_state() != new_state {
