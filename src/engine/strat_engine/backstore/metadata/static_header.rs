@@ -265,22 +265,6 @@ impl StaticHeader {
         }
     }
 
-    /// Retrieve the device and pool UUIDs from a stratis device.
-    pub fn device_identifiers<F>(f: &mut F) -> StratisResult<Option<((PoolUuid, DevUuid))>>
-    where
-        F: Read + Seek + SyncAll,
-    {
-        // Using setup() as a test of ownership sets a high bar. It is
-        // not sufficient to have STRAT_MAGIC to be considered "Ours",
-        // it must also have correct CRC, no weird stuff in fields,
-        // etc!
-        match StaticHeader::setup(f) {
-            Ok(Some(sh)) => Ok(Some((sh.pool_uuid, sh.dev_uuid))),
-            Ok(None) => Ok(None),
-            Err(err) => Err(err),
-        }
-    }
-
     /// Generate a buf suitable for writing to blockdev
     pub fn sigblock_to_buf(&self) -> [u8; SECTOR_SIZE] {
         let mut buf = [0u8; SECTOR_SIZE];
