@@ -110,7 +110,6 @@ impl Pool for SimPool {
         _pool_uuid: PoolUuid,
         _pool_name: &str,
         blockdevs: &[&Path],
-        keyfile_path: Option<PathBuf>,
     ) -> StratisResult<SetCreateAction<DevUuid>> {
         if self.cache_devs.is_empty() {
             let blockdev_pairs: Vec<_> = blockdevs
@@ -119,7 +118,7 @@ impl Pool for SimPool {
                     SimDev::new(
                         Rc::clone(&self.rdm),
                         p,
-                        keyfile_path.as_ref().map(|p| p.as_path()),
+                        self.block_devs_keyfile_path.as_ref().map(|p| p.as_path()),
                     )
                 })
                 .collect();
@@ -369,10 +368,6 @@ impl Pool for SimPool {
 
     fn is_encrypted(&self) -> bool {
         self.datadevs_encrypted()
-    }
-
-    fn keyfile_path(&self) -> Option<&Path> {
-        self.block_devs_keyfile_path.as_ref().map(|p| p.as_path())
     }
 
     fn cache_initialized(&self) -> bool {

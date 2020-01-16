@@ -87,7 +87,6 @@ pub trait Pool: Debug {
         pool_uuid: PoolUuid,
         pool_name: &str,
         blockdevs: &[&Path],
-        keyfile_path: Option<PathBuf>,
     ) -> StratisResult<SetCreateAction<DevUuid>>;
 
     /// Creates the filesystems specified by specs.
@@ -207,9 +206,6 @@ pub trait Pool: Debug {
 
     /// Determine if the pool's data is encrypted
     fn is_encrypted(&self) -> bool;
-
-    /// Get pool's keyfile path if it is encrypted
-    fn keyfile_path(&self) -> Option<&Path>;
 
     /// Check if the cache has already been initialized
     fn cache_initialized(&self) -> bool;

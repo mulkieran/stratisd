@@ -290,7 +290,6 @@ impl Pool for StratPool {
         pool_uuid: PoolUuid,
         pool_name: &str,
         blockdevs: &[&Path],
-        keyfile_path: Option<PathBuf>,
     ) -> StratisResult<SetCreateAction<DevUuid>> {
         if self.backstore.cache_initialized() {
             init_cache_idempotent_or_err(
@@ -304,9 +303,13 @@ impl Pool for StratPool {
             // If adding cache devices, must suspend the pool, since the cache
             // must be augmented with the new devices.
             self.thin_pool.suspend()?;
-            let devices_result = self
-                .backstore
-                .init_cache(pool_uuid, blockdevs, keyfile_path);
+            let devices_result = self.backstore.init_cache(
+                pool_uuid,
+                blockdevs,
+                self.backstore
+                    .data_keyfile_path()
+                    .map(|kfp| kfp.to_path_buf()),
+            );
             self.thin_pool.resume()?;
             let devices = devices_result?;
             self.write_metadata(pool_name)?;
@@ -546,10 +549,6 @@ impl Pool for StratPool {
         self.datadevs_encrypted()
     }
 
-    fn keyfile_path(&self) -> Option<&Path> {
-        self.backstore.data_keyfile_path()
-    }
-
     fn cache_initialized(&self) -> bool {
         self.backstore.cache_initialized()
     }
@@ -719,7 +718,7 @@ mod tests {
                 .unwrap();
         }
 
-        pool.init_cache(uuid, name, paths1, None).unwrap();
+        pool.init_cache(uuid, name, paths1).unwrap();
         invariant(&pool, name);
 
         let metadata2 = pool.record(name);
