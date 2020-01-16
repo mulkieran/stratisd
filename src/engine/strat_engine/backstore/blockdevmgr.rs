@@ -369,10 +369,6 @@ impl BlockDevMgr {
     pub fn keyfile_path(&self) -> Option<&Path> {
         self.keyfile_path.as_ref().map(|p| p.as_path())
     }
-
-    pub fn is_encrypted(&self) -> bool {
-        self.keyfile_path.is_some()
-    }
 }
 
 impl Recordable<Vec<BaseBlockDevSave>> for BlockDevMgr {

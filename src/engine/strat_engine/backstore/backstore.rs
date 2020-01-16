@@ -641,10 +641,6 @@ impl Backstore {
         self.data_tier.keyfile_path()
     }
 
-    pub fn data_tier_is_encrypted(&self) -> bool {
-        self.data_tier.is_encrypted()
-    }
-
     pub fn cache_initialized(&self) -> bool {
         self.cache_tier.is_some()
     }

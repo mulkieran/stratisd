@@ -278,10 +278,6 @@ impl StratPool {
             thinpool_dev: self.thin_pool.record(),
         }
     }
-
-    fn datadevs_encrypted(&self) -> bool {
-        self.backstore.data_tier_is_encrypted()
-    }
 }
 
 impl Pool for StratPool {
@@ -543,10 +539,6 @@ impl Pool for StratPool {
 
     fn get_dbus_path(&self) -> &MaybeDbusPath {
         &self.dbus_path
-    }
-
-    fn is_encrypted(&self) -> bool {
-        self.datadevs_encrypted()
     }
 
     fn cache_initialized(&self) -> bool {

@@ -204,9 +204,6 @@ pub trait Pool: Debug {
     /// Get dbus path associated with the Pool.
     fn get_dbus_path(&self) -> &MaybeDbusPath;
 
-    /// Determine if the pool's data is encrypted
-    fn is_encrypted(&self) -> bool;
-
     /// Check if the cache has already been initialized
     fn cache_initialized(&self) -> bool;
 }

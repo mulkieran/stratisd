@@ -152,11 +152,6 @@ impl DataTier {
         self.block_mgr.blockdevs_mut()
     }
 
-    /// Data tier is encrypted
-    pub fn is_encrypted(&self) -> bool {
-        self.block_mgr.is_encrypted()
-    }
-
     /// Data tier keyfile_path
     pub fn keyfile_path(&self) -> Option<&Path> {
         self.block_mgr.keyfile_path()

@@ -98,10 +98,6 @@ impl SimPool {
                     .map(|bd| (BlockDevTier::Cache, bd))
             })
     }
-
-    fn datadevs_encrypted(&self) -> bool {
-        self.block_devs_keyfile_path.is_some()
-    }
 }
 
 impl Pool for SimPool {
@@ -364,10 +360,6 @@ impl Pool for SimPool {
 
     fn get_dbus_path(&self) -> &MaybeDbusPath {
         &self.dbus_path
-    }
-
-    fn is_encrypted(&self) -> bool {
-        self.datadevs_encrypted()
     }
 
     fn cache_initialized(&self) -> bool {
