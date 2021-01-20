@@ -321,23 +321,17 @@ impl StaticHeader {
         // the valid sigblock.
         //
         // In all other cases, return the error associated with the invalid sigblock.
-        fn ok_err_static_header_handling<F, C>(
-            f: &mut F,
-            maybe_sh: Option<StaticHeader>,
-            sh_error: StratisError,
-            repair_location: MetadataLocation,
-            closure: C,
-        ) -> StratisResult<Option<StaticHeader>>
-        where
-            F: Seek + SyncAll,
-            C: Fn(&mut F, StaticHeader, MetadataLocation) -> StratisResult<Option<StaticHeader>>,
-        {
+        let ok_err_static_header_handling = |f: &mut F,
+                                             maybe_sh: Option<StaticHeader>,
+                                             sh_error: StratisError,
+                                             repair_location: MetadataLocation|
+         -> StratisResult<Option<StaticHeader>> {
             if let Some(sh) = maybe_sh {
                 closure(f, sh, repair_location)
             } else {
                 Err(sh_error)
             }
-        }
+        };
 
         // Action taken when both sigblock locations are analyzed without encountering an error.
         //
@@ -438,15 +432,11 @@ impl StaticHeader {
                 },
             ) => match (maybe_sh_1, maybe_sh_2) {
                 (Ok(loc_1), Ok(loc_2)) => ok_ok_static_header_handling(f, loc_1, loc_2, closure),
-                (Ok(loc_1), Err(loc_2)) => ok_err_static_header_handling(
-                    f,
-                    loc_1,
-                    loc_2,
-                    MetadataLocation::Second,
-                    closure,
-                ),
+                (Ok(loc_1), Err(loc_2)) => {
+                    ok_err_static_header_handling(f, loc_1, loc_2, MetadataLocation::Second)
+                }
                 (Err(loc_1), Ok(loc_2)) => {
-                    ok_err_static_header_handling(f, loc_2, loc_1, MetadataLocation::First, closure)
+                    ok_err_static_header_handling(f, loc_2, loc_1, MetadataLocation::First)
                 }
                 (Err(_), Err(_)) => {
                     let err_str = "Appeared to be a Stratis device, but no valid sigblock found";
