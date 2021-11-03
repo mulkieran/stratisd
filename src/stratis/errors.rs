@@ -2,7 +2,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use std::{collections::HashSet, error::Error, fmt, io, iter::once, str, sync};
+use std::{collections::HashSet, error::Error, fmt, io, iter::once, num, str, sync};
 
 use crate::engine::ActionAvailability;
 
@@ -28,6 +28,7 @@ pub enum StratisError {
         causal_error: Box<StratisError>,
         rollback_error: Box<StratisError>,
     },
+    OutOfSpaceError(String),
     Io(io::Error),
     Nix(nix::Error),
     Uuid(uuid::Error),
@@ -44,6 +45,7 @@ pub enum StratisError {
     #[cfg(feature = "dbus_enabled")]
     Dbus(dbus::Error),
     Udev(libudev::Error),
+    ParseInt(num::ParseIntError),
 }
 
 impl StratisError {
@@ -116,6 +118,9 @@ impl fmt::Display for StratisError {
                     causal_error, rollback_error
                 )
             }
+            StratisError::OutOfSpaceError(ref msg) => {
+                write!(f, "Pool is out of space and cannot be extended: {}", msg)
+            }
             StratisError::Io(ref err) => write!(f, "IO error: {}", err),
             StratisError::Nix(ref err) => write!(f, "Nix error: {}", err),
             StratisError::Uuid(ref err) => write!(f, "Uuid error: {}", err),
@@ -136,11 +141,18 @@ impl fmt::Display for StratisError {
                 write!(f, "Dbus error: {}", err.message().unwrap_or("Unknown"))
             }
             StratisError::Udev(ref err) => write!(f, "Udev error: {}", err),
+            StratisError::ParseInt(ref err) => write!(f, "Integer parsing error: {}", err),
         }
     }
 }
 
 impl Error for StratisError {}
+
+impl From<num::ParseIntError> for StratisError {
+    fn from(err: num::ParseIntError) -> StratisError {
+        StratisError::ParseInt(err)
+    }
+}
 
 impl From<libblkid_rs::BlkidErr> for StratisError {
     fn from(err: libblkid_rs::BlkidErr) -> StratisError {
