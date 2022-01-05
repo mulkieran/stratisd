@@ -1303,7 +1303,7 @@ impl ThinPool {
         backstore: &mut Backstore,
         new_limit: u64,
     ) -> StratisResult<()> {
-        if self.fs_limit <= new_limit {
+        if self.fs_limit >= new_limit {
             Err(StratisError::Msg(
                 "New filesystem limit must be greater than the current limit".to_string(),
             ))
