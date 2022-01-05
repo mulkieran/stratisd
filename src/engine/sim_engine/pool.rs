@@ -38,6 +38,7 @@ pub struct SimPool {
     block_devs: HashMap<DevUuid, SimDev>,
     cache_devs: HashMap<DevUuid, SimDev>,
     filesystems: Table<FilesystemUuid, SimFilesystem>,
+    fs_limit: u64,
 }
 
 impl SimPool {
@@ -50,6 +51,7 @@ impl SimPool {
                 block_devs: device_pairs.collect(),
                 cache_devs: HashMap::new(),
                 filesystems: Table::default(),
+                fs_limit: 10,
             },
         )
     }
@@ -210,6 +212,10 @@ impl Pool for SimPool {
         _pool_uuid: PoolUuid,
         specs: &[(&'b str, Option<Bytes>)],
     ) -> StratisResult<SetCreateAction<(&'b str, FilesystemUuid, Sectors)>> {
+        if self.fs_limit == self.filesystems.len() as u64 {
+            return Err(StratisError::Msg(format!("The limit of {} filesystems on this pool has been reached; increase the filesystem limit on the pool to continue", self.fs_limit)));
+        }
+
         let spec_map = validate_filesystem_size_specs(specs)?;
 
         spec_map.iter().fold(Ok(()), |res, (name, size)| {
@@ -633,6 +639,21 @@ impl Pool for SimPool {
 
     fn avail_actions(&self) -> ActionAvailability {
         ActionAvailability::Full
+    }
+
+    fn fs_limit(&self) -> u64 {
+        self.fs_limit
+    }
+
+    fn set_fs_limit(&mut self, _: PoolUuid, new_limit: u64) -> StratisResult<()> {
+        if new_limit <= self.fs_limit {
+            Err(StratisError::Msg(
+                "New filesystem limit must be greater than old limit".to_string(),
+            ))
+        } else {
+            self.fs_limit = new_limit;
+            Ok(())
+        }
     }
 }
 

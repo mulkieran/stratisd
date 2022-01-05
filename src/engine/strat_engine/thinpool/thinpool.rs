@@ -37,7 +37,7 @@ use crate::{
 
 // Maximum number of thin devices (filesystems) allowed on a thin pool.
 // NOTE: This will eventually become a default configurable by the user.
-pub const MAX_THINS: u64 = 100;
+pub const DEFAULT_FS_LIMIT: u64 = 100;
 
 // 1 MiB
 pub const DATA_BLOCK_SIZE: Sectors = Sectors(2 * IEC::Ki);
@@ -213,13 +213,14 @@ fn search(
     total_space: Sectors,
     upper_limit: Sectors,
     lower_limit: Sectors,
+    fs_limit: u64,
 ) -> StratisResult<(Sectors, Sectors)> {
     let upper_aligned = upper_limit / DATA_BLOCK_SIZE * DATA_BLOCK_SIZE;
     let lower_aligned = lower_limit / DATA_BLOCK_SIZE * DATA_BLOCK_SIZE;
 
     let (upper_meta_size, lower_meta_size) = (
-        thin_metadata_size(DATA_BLOCK_SIZE, upper_aligned, MAX_THINS)?,
-        thin_metadata_size(DATA_BLOCK_SIZE, lower_aligned, MAX_THINS)?,
+        thin_metadata_size(DATA_BLOCK_SIZE, upper_aligned, fs_limit)?,
+        thin_metadata_size(DATA_BLOCK_SIZE, lower_aligned, fs_limit)?,
     );
 
     let diff = upper_limit - lower_limit;
@@ -227,14 +228,14 @@ fn search(
     let half_limit = lower_aligned + half_diff;
     let half_aligned = half_limit / DATA_BLOCK_SIZE * DATA_BLOCK_SIZE;
 
-    let half_meta_size = thin_metadata_size(DATA_BLOCK_SIZE, half_aligned, MAX_THINS)?;
+    let half_meta_size = thin_metadata_size(DATA_BLOCK_SIZE, half_aligned, fs_limit)?;
 
     if upper_meta_size == lower_meta_size && half_aligned == lower_aligned {
         Ok((lower_aligned, lower_meta_size))
     } else if total_space <= half_aligned + 2u64 * half_meta_size {
-        search(total_space, half_aligned, lower_aligned)
+        search(total_space, half_aligned, lower_aligned, fs_limit)
     } else {
-        search(total_space, upper_aligned, half_aligned)
+        search(total_space, upper_aligned, half_aligned, fs_limit)
     }
 }
 
@@ -245,6 +246,7 @@ fn divide_space(
     available_space: Sectors,
     current_data_size: Sectors,
     current_meta_size: Sectors,
+    fs_limit: u64,
 ) -> StratisResult<(Sectors, Sectors)> {
     let upper_data_aligned =
         (current_data_size + available_space) / DATA_BLOCK_SIZE * DATA_BLOCK_SIZE;
@@ -255,12 +257,13 @@ fn divide_space(
     debug!("Current data device size: {}", current_data_size);
     debug!("Current meta device size: {}", current_meta_size);
 
-    let upper_limit_meta_size = thin_metadata_size(DATA_BLOCK_SIZE, upper_data_aligned, MAX_THINS)?;
+    let upper_limit_meta_size = thin_metadata_size(DATA_BLOCK_SIZE, upper_data_aligned, fs_limit)?;
 
     let (data_size, meta_size) = search(
         total_space,
         upper_data_aligned,
         Sectors(upper_data_aligned.saturating_sub(2u64 * *upper_limit_meta_size)),
+        fs_limit,
     )?;
 
     let data_extended = data_size - current_data_size;
@@ -286,6 +289,7 @@ fn calculate_subdevice_extension(
     current_data_size: Sectors,
     current_meta_size: Sectors,
     requested_space: Sectors,
+    fs_limit: u64,
 ) -> StratisResult<(Sectors, Sectors)> {
     if available_space / DATA_BLOCK_SIZE * DATA_BLOCK_SIZE == Sectors(0)
         && requested_space > Sectors(0)
@@ -298,7 +302,12 @@ fn calculate_subdevice_extension(
 
     let requested_min = min(available_space, requested_space);
 
-    divide_space(requested_min, current_data_size, current_meta_size)
+    divide_space(
+        requested_min,
+        current_data_size,
+        current_meta_size,
+        fs_limit,
+    )
 }
 
 pub struct ThinPoolSizeParams {
@@ -315,7 +324,8 @@ impl ThinPoolSizeParams {
             datablocks_to_sectors(DATA_ALLOC_SIZE),
         );
 
-        let (data_size, meta_size) = divide_space(initial_space, Sectors(0), Sectors(0))?;
+        let (data_size, meta_size) =
+            divide_space(initial_space, Sectors(0), Sectors(0), DEFAULT_FS_LIMIT)?;
 
         Ok(ThinPoolSizeParams {
             data_size: sectors_to_datablocks(data_size),
@@ -388,6 +398,7 @@ pub struct ThinPool {
     thin_pool_status: Option<ThinPoolStatusDigest>,
     allocated_size: Sectors,
     used: Option<ThinPoolUsage>,
+    fs_limit: u64,
 }
 
 impl ThinPool {
@@ -511,6 +522,7 @@ impl ThinPool {
             thin_pool_status: digest,
             allocated_size: backstore.datatier_allocated_size(),
             used: status_to_usage(thin_pool_status),
+            fs_limit: DEFAULT_FS_LIMIT,
         })
     }
 
@@ -527,6 +539,7 @@ impl ThinPool {
         thin_pool_save: &ThinPoolDevSave,
         flex_devs: &FlexDevsSave,
         backstore: &Backstore,
+        fs_limit: u64,
     ) -> StratisResult<ThinPool> {
         let mdv_segments = flex_devs.meta_dev.to_vec();
         let meta_segments = flex_devs.thin_meta_dev.to_vec();
@@ -628,6 +641,7 @@ impl ThinPool {
             thin_pool_status: digest,
             allocated_size: backstore.datatier_allocated_size(),
             used: status_to_usage(thin_pool_status),
+            fs_limit,
         })
     }
 
@@ -778,6 +792,7 @@ impl ThinPool {
             self.thin_pool.data_dev().size(),
             self.thin_pool.meta_dev().size(),
             datablocks_to_sectors(DATA_ALLOC_SIZE),
+            self.fs_limit,
         )?;
 
         ThinPool::extend_thin_sub_devices(
@@ -1016,6 +1031,10 @@ impl ThinPool {
         name: &str,
         size: Sectors,
     ) -> StratisResult<FilesystemUuid> {
+        if self.fs_limit == self.filesystems.len() as u64 {
+            return Err(StratisError::Msg(format!("The pool limit of {} filesystems has already been reached; increase the filesystem limit on the pool to continue", self.fs_limit)));
+        }
+
         let (fs_uuid, mut new_filesystem) =
             StratFilesystem::initialize(pool_uuid, &self.thin_pool, size, self.id_gen.new_id()?)?;
         let name = Name::new(name.to_owned());
@@ -1273,6 +1292,27 @@ impl ThinPool {
 
         Ok(true)
     }
+
+    pub fn fs_limit(&self) -> u64 {
+        self.fs_limit
+    }
+
+    pub fn set_fs_limit(
+        &mut self,
+        pool_uuid: PoolUuid,
+        backstore: &mut Backstore,
+        new_limit: u64,
+    ) -> StratisResult<()> {
+        if self.fs_limit <= new_limit {
+            Err(StratisError::Msg(
+                "New filesystem limit must be greater than the current limit".to_string(),
+            ))
+        } else {
+            self.extend_thin_meta_device(pool_uuid, backstore, new_limit)?;
+            self.fs_limit = new_limit;
+            Ok(())
+        }
+    }
 }
 
 impl<'a> Into<Value> for &'a ThinPool {
@@ -1496,7 +1536,7 @@ mod tests {
         let mdv_size = INITIAL_MDV_SIZE;
         assert_eq!(
             meta_size,
-            thin_metadata_size(DATA_BLOCK_SIZE, data_size, MAX_THINS).unwrap()
+            thin_metadata_size(DATA_BLOCK_SIZE, data_size, DEFAULT_FS_LIMIT).unwrap()
         );
         assert_eq!(
             mdv_size + data_size + 2u64 * meta_size,
@@ -1806,8 +1846,15 @@ mod tests {
 
         retry_operation!(pool.teardown());
 
-        let pool =
-            ThinPool::setup(pool_name, pool_uuid, &thinpoolsave, &flexdevs, &backstore).unwrap();
+        let pool = ThinPool::setup(
+            pool_name,
+            pool_uuid,
+            &thinpoolsave,
+            &flexdevs,
+            &backstore,
+            DEFAULT_FS_LIMIT,
+        )
+        .unwrap();
 
         assert_eq!(&*pool.get_filesystem_by_uuid(fs_uuid).unwrap().0, name2);
     }
@@ -1883,6 +1930,7 @@ mod tests {
             &thinpooldevsave,
             &pool.record(),
             &backstore,
+            DEFAULT_FS_LIMIT,
         )
         .unwrap();
 
@@ -1937,6 +1985,7 @@ mod tests {
             &thinpooldevsave,
             &flexdevs,
             &backstore,
+            DEFAULT_FS_LIMIT,
         )
         .unwrap();
 

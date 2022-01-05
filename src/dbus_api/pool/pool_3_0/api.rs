@@ -15,8 +15,8 @@ use crate::{
             },
             props::{
                 get_pool_allocated_size, get_pool_avail_actions, get_pool_clevis_info,
-                get_pool_encrypted, get_pool_has_cache, get_pool_key_desc, get_pool_name,
-                get_pool_total_size, get_pool_used_size,
+                get_pool_encrypted, get_pool_has_cache, get_pool_key_desc,
+                get_pool_name, get_pool_total_size, get_pool_used_size
             },
         },
         types::TData,

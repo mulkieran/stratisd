@@ -34,6 +34,7 @@ pub struct PoolSave {
     pub name: String,
     pub backstore: BackstoreSave,
     pub flex_devs: FlexDevsSave,
+    pub fs_limit: u64,
     pub thinpool_dev: ThinPoolDevSave,
 }
 

@@ -225,6 +225,7 @@ impl StratPool {
             &metadata.thinpool_dev,
             &metadata.flex_devs,
             &backstore,
+            metadata.fs_limit,
         )?;
 
         let (needs_save, _) = thinpool.check(uuid, &mut backstore)?;
@@ -310,6 +311,7 @@ impl StratPool {
             backstore: self.backstore.record(),
             flex_devs: self.thin_pool.record(),
             thinpool_dev: self.thin_pool.record(),
+            fs_limit: self.thin_pool.fs_limit(),
         }
     }
 
@@ -760,6 +762,15 @@ impl Pool for StratPool {
 
     fn avail_actions(&self) -> ActionAvailability {
         self.action_avail.clone()
+    }
+
+    fn fs_limit(&self) -> u64 {
+        self.thin_pool.fs_limit()
+    }
+
+    fn set_fs_limit(&mut self, pool_uuid: PoolUuid, new_limit: u64) -> StratisResult<()> {
+        self.thin_pool
+            .set_fs_limit(pool_uuid, &mut self.backstore, new_limit)
     }
 }
 

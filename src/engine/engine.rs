@@ -290,6 +290,12 @@ pub trait Pool: Debug + Send + Sync {
     /// will be disabled or enabled. Disabled actions are triggered by failures
     /// caught by stratisd.
     fn avail_actions(&self) -> ActionAvailability;
+
+    /// Get the current limit on filesystems in this pool.
+    fn fs_limit(&self) -> u64;
+
+    /// Set the current limit on filesystems in this pool.
+    fn set_fs_limit(&mut self, pool_uuid: PoolUuid, new_limit: u64) -> StratisResult<()>;
 }
 
 #[async_trait]
