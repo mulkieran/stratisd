@@ -335,6 +335,7 @@ where
 /// Generate a D-Bus representation of the filesystem limit on the pool.
 #[inline]
 pub fn set_pool_fs_limit<E>(
+    name: &Name,
     pool_uuid: PoolUuid,
     pool: &mut E::Pool,
     new_limit: u64,
@@ -342,6 +343,6 @@ pub fn set_pool_fs_limit<E>(
 where
     E: 'static + Engine,
 {
-    pool.set_fs_limit(pool_uuid, new_limit)
+    pool.set_fs_limit(name, pool_uuid, new_limit)
         .map_err(|e| e.to_string())
 }

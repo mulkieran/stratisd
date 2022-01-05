@@ -33,7 +33,7 @@ where
     let fs_limit = i.get().ok_or_else(|| {
         MethodErr::failed("New filesystem limit required as argument to increase it")
     })?;
-    set_pool_property(p, |(_, uuid, pool)| {
-        shared::set_pool_fs_limit::<E>(uuid, pool, fs_limit)
+    set_pool_property(p, |(name, uuid, pool)| {
+        shared::set_pool_fs_limit::<E>(&name, uuid, pool, fs_limit)
     })
 }

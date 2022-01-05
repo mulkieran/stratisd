@@ -768,9 +768,20 @@ impl Pool for StratPool {
         self.thin_pool.fs_limit()
     }
 
-    fn set_fs_limit(&mut self, pool_uuid: PoolUuid, new_limit: u64) -> StratisResult<()> {
-        self.thin_pool
-            .set_fs_limit(pool_uuid, &mut self.backstore, new_limit)
+    #[pool_mutating_action("NoPoolChanges")]
+    fn set_fs_limit(
+        &mut self,
+        pool_name: &Name,
+        pool_uuid: PoolUuid,
+        new_limit: u64,
+    ) -> StratisResult<()> {
+        let res = self
+            .thin_pool
+            .set_fs_limit(pool_uuid, &mut self.backstore, new_limit);
+        if res.is_ok() {
+            self.write_metadata(pool_name)?;
+        }
+        res
     }
 }
 

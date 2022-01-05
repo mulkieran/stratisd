@@ -295,7 +295,12 @@ pub trait Pool: Debug + Send + Sync {
     fn fs_limit(&self) -> u64;
 
     /// Set the current limit on filesystems in this pool.
-    fn set_fs_limit(&mut self, pool_uuid: PoolUuid, new_limit: u64) -> StratisResult<()>;
+    fn set_fs_limit(
+        &mut self,
+        pool_name: &Name,
+        pool_uuid: PoolUuid,
+        new_limit: u64,
+    ) -> StratisResult<()>;
 }
 
 #[async_trait]

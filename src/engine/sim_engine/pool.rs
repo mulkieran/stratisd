@@ -645,7 +645,7 @@ impl Pool for SimPool {
         self.fs_limit
     }
 
-    fn set_fs_limit(&mut self, _: PoolUuid, new_limit: u64) -> StratisResult<()> {
+    fn set_fs_limit(&mut self, _: &Name, _: PoolUuid, new_limit: u64) -> StratisResult<()> {
         if new_limit <= self.fs_limit {
             Err(StratisError::Msg(
                 "New filesystem limit must be greater than old limit".to_string(),
