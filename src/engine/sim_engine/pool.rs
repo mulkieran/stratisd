@@ -212,7 +212,7 @@ impl Pool for SimPool {
         _pool_uuid: PoolUuid,
         specs: &[(&'b str, Option<Bytes>)],
     ) -> StratisResult<SetCreateAction<(&'b str, FilesystemUuid, Sectors)>> {
-        if self.fs_limit == self.filesystems.len() as u64 {
+        if convert_int!(self.fs_limit, u64, usize)? < self.filesystems.len() + specs.len() {
             return Err(StratisError::Msg(format!("The limit of {} filesystems on this pool has been reached; increase the filesystem limit on the pool to continue", self.fs_limit)));
         }
 

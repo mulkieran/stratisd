@@ -1031,10 +1031,6 @@ impl ThinPool {
         name: &str,
         size: Sectors,
     ) -> StratisResult<FilesystemUuid> {
-        if self.fs_limit == self.filesystems.len() as u64 {
-            return Err(StratisError::Msg(format!("The pool limit of {} filesystems has already been reached; increase the filesystem limit on the pool to continue", self.fs_limit)));
-        }
-
         let (fs_uuid, mut new_filesystem) =
             StratFilesystem::initialize(pool_uuid, &self.thin_pool, size, self.id_gen.new_id()?)?;
         let name = Name::new(name.to_owned());

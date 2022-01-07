@@ -525,6 +525,11 @@ impl Pool for StratPool {
         pool_uuid: PoolUuid,
         specs: &[(&'a str, Option<Bytes>)],
     ) -> StratisResult<SetCreateAction<(&'a str, FilesystemUuid, Sectors)>> {
+        let fs_limit = self.fs_limit();
+        if convert_int!(fs_limit, u64, usize)? < self.filesystems().len() + specs.len() {
+            return Err(StratisError::Msg(format!("The pool limit of {} filesystems has already been reached; increase the filesystem limit on the pool to continue", fs_limit)));
+        }
+
         let spec_map = validate_filesystem_size_specs(specs)?;
 
         spec_map.iter().fold(Ok(()), |res, (name, size)| {

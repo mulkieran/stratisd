@@ -332,7 +332,7 @@ where
     pool.fs_limit()
 }
 
-/// Generate a D-Bus representation of the filesystem limit on the pool.
+/// Set the filesystem limit on a pool.
 #[inline]
 pub fn set_pool_fs_limit<E>(
     name: &Name,
