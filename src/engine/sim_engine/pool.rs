@@ -112,6 +112,15 @@ impl SimPool {
             .iter_mut()
             .for_each(|(_, bd)| bd.unset_key_desc())
     }
+
+    /// Check the limit of filesystems on a pool and return an error if it has been passed.
+    fn check_fs_limit(&self, new_fs: usize) -> StratisResult<()> {
+        if convert_int!(self.fs_limit, u64, usize)? < self.filesystems.len() + new_fs {
+            Err(StratisError::Msg(format!("The pool limit of {} filesystems has already been reached; increase the filesystem limit on the pool to continue", self.fs_limit)))
+        } else {
+            Ok(())
+        }
+    }
 }
 
 // Precondition: SimDev::into() always returns a value that matches Value::Object(_).
@@ -212,9 +221,7 @@ impl Pool for SimPool {
         _pool_uuid: PoolUuid,
         specs: &[(&'b str, Option<Bytes>)],
     ) -> StratisResult<SetCreateAction<(&'b str, FilesystemUuid, Sectors)>> {
-        if convert_int!(self.fs_limit, u64, usize)? < self.filesystems.len() + specs.len() {
-            return Err(StratisError::Msg(format!("The limit of {} filesystems on this pool has been reached; increase the filesystem limit on the pool to continue", self.fs_limit)));
-        }
+        self.check_fs_limit(specs.len())?;
 
         let spec_map = validate_filesystem_size_specs(specs)?;
 
@@ -514,6 +521,8 @@ impl Pool for SimPool {
         origin_uuid: FilesystemUuid,
         snapshot_name: &str,
     ) -> StratisResult<CreateAction<(FilesystemUuid, &mut Self::Filesystem)>> {
+        self.check_fs_limit(1)?;
+
         validate_name(snapshot_name)?;
 
         let target = self.filesystems.get_by_name(snapshot_name);

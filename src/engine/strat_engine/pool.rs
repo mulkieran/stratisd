@@ -343,6 +343,16 @@ impl StratPool {
         Ok(())
     }
 
+    /// Check the limit of filesystems on a pool and return an error if it has been passed.
+    fn check_fs_limit(&self, new_fs: usize) -> StratisResult<()> {
+        let fs_limit = self.fs_limit();
+        if convert_int!(fs_limit, u64, usize)? < self.filesystems().len() + new_fs {
+            Err(StratisError::Msg(format!("The pool limit of {} filesystems has already been reached; increase the filesystem limit on the pool to continue", fs_limit)))
+        } else {
+            Ok(())
+        }
+    }
+
     #[cfg(test)]
     #[pool_mutating_action("NoRequests")]
     #[pool_rollback]
@@ -525,10 +535,7 @@ impl Pool for StratPool {
         pool_uuid: PoolUuid,
         specs: &[(&'a str, Option<Bytes>)],
     ) -> StratisResult<SetCreateAction<(&'a str, FilesystemUuid, Sectors)>> {
-        let fs_limit = self.fs_limit();
-        if convert_int!(fs_limit, u64, usize)? < self.filesystems().len() + specs.len() {
-            return Err(StratisError::Msg(format!("The pool limit of {} filesystems has already been reached; increase the filesystem limit on the pool to continue", fs_limit)));
-        }
+        self.check_fs_limit(specs.len())?;
 
         let spec_map = validate_filesystem_size_specs(specs)?;
 
@@ -665,6 +672,8 @@ impl Pool for StratPool {
         origin_uuid: FilesystemUuid,
         snapshot_name: &str,
     ) -> StratisResult<CreateAction<(FilesystemUuid, &'a mut Self::Filesystem)>> {
+        self.check_fs_limit(1)?;
+
         validate_name(snapshot_name)?;
 
         if self
