@@ -606,6 +606,7 @@ impl Pool for StratPool {
             // If just adding data devices, no need to suspend the pool.
             // No action will be taken on the DM devices.
             let bdev_info = self.backstore.add_datadevs(pool_uuid, paths)?;
+            self.thin_pool.set_queue_mode();
 
             // Adding data devices does not change the state of the thin
             // pool at all. However, if the thin pool is in a state
@@ -789,10 +790,10 @@ impl Pool for StratPool {
         pool_uuid: PoolUuid,
         new_limit: u64,
     ) -> StratisResult<()> {
-        let res = self
-            .thin_pool
-            .set_fs_limit(pool_uuid, &mut self.backstore, new_limit);
-        if res.is_ok() {
+        let (should_save, res) =
+            self.thin_pool
+                .set_fs_limit(pool_uuid, &mut self.backstore, new_limit);
+        if should_save {
             self.write_metadata(pool_name)?;
         }
         res

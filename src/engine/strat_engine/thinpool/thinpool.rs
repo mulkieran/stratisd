@@ -42,7 +42,7 @@ pub const DEFAULT_FS_LIMIT: u64 = 100;
 // 1 MiB
 pub const DATA_BLOCK_SIZE: Sectors = Sectors(2 * IEC::Ki);
 // 5 GiB
-pub const DATA_LOWATER: DataBlocks = DataBlocks(25 * IEC::Ki);
+pub const DATA_LOWATER: DataBlocks = DataBlocks(5 * IEC::Ki);
 
 // 50 GiB
 const DATA_ALLOC_SIZE: DataBlocks = DataBlocks(50 * IEC::Ki);
@@ -684,10 +684,15 @@ impl ThinPool {
         if let Some(usage) = self.used.as_ref().cloned() {
             if self.thin_pool.data_dev().size() - datablocks_to_sectors(usage.used_data)
                 < datablocks_to_sectors(DATA_LOWATER)
+                && !self.out_of_alloc_space()
             {
                 let amount_allocated = match self.extend_thin_data_device(pool_uuid, backstore) {
-                    Ok(extend_size) => extend_size,
-                    Err(e) => {
+                    (changed, Ok(extend_size)) => {
+                        should_save |= changed;
+                        extend_size
+                    }
+                    (changed, Err(e)) => {
+                        should_save |= changed;
                         warn!("Device extension failed: {}", e);
                         (Sectors(0), Sectors(0))
                     }
@@ -780,6 +785,57 @@ impl ThinPool {
         Ok(())
     }
 
+    /// Set the pool IO mode to queue writes when out of space.
+    ///
+    /// This mode should be enabled when the pool has space to allocate to the pool.
+    /// This prevents unnecessary IO errors while the pools is being extended and
+    /// the writes can then be processed after the extension.
+    fn set_error_mode(&mut self) -> bool {
+        if !self.out_of_alloc_space() {
+            if let Err(e) = self.thin_pool.error_if_no_space(get_dm()) {
+                warn!(
+                    "Could not put thin pool into IO error mode on out of space conditions: {}",
+                    e
+                );
+                false
+            } else {
+                true
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Set the pool IO mode to error on writes when out of space.
+    ///
+    /// This mode should be enabled when the pool is out of space to allocate to the
+    /// pool.
+    pub fn set_queue_mode(&mut self) -> bool {
+        if self.out_of_alloc_space() {
+            if let Err(e) = self.thin_pool.queue_if_no_space(get_dm()) {
+                warn!(
+                    "Could not put thin pool into IO queue mode on out of space conditions: {}",
+                    e
+                );
+                false
+            } else {
+                true
+            }
+        } else {
+            false
+        }
+    }
+
+    /// Returns true if the pool has run out of available space to allocate.
+    fn out_of_alloc_space(&self) -> bool {
+        self.thin_pool
+            .table()
+            .table
+            .params
+            .feature_args
+            .contains("error_if_no_space")
+    }
+
     /// Extend thinpool's data dev. See extend_thin_sub_device for more info.
     ///
     /// Because this method must extend both the data device and metadata device,
@@ -788,7 +844,9 @@ impl ThinPool {
         &mut self,
         pool_uuid: PoolUuid,
         backstore: &mut Backstore,
-    ) -> StratisResult<(Sectors, Sectors)> {
+    ) -> (bool, StratisResult<(Sectors, Sectors)>) {
+        let mut should_save = false;
+
         let available_size = backstore.available_in_backstore();
         let res = calculate_subdevice_extension(
             available_size,
@@ -798,25 +856,14 @@ impl ThinPool {
             self.fs_limit,
         );
         if let Err(StratisError::OutOfSpaceError(_)) = res {
-            if !self
-                .thin_pool
-                .table()
-                .table
-                .params
-                .feature_args
-                .contains("error_if_no_space")
-            {
-                if let Err(e) = self.thin_pool.error_if_no_space(get_dm()) {
-                    warn!(
-                        "Could not put thin pool into IO error mode on out of space conditions: {}",
-                        e
-                    );
-                }
-            }
+            should_save |= self.set_error_mode();
         }
-        let (requested_data, requested_meta) = res?;
+        let (requested_data, requested_meta) = match res {
+            Ok((rd, rm)) => (rd, rm),
+            Err(e) => return (should_save, Err(e)),
+        };
 
-        ThinPool::extend_thin_sub_devices(
+        let res = ThinPool::extend_thin_sub_devices(
             pool_uuid,
             &mut self.thin_pool,
             backstore,
@@ -826,7 +873,8 @@ impl ThinPool {
                 &mut self.segments.meta_segments,
                 &mut self.segments.meta_spare_segments,
             ),
-        )
+        );
+        (should_save | res.is_ok(), res)
     }
 
     /// Extend thinpool's meta dev. See extend_thin_sub_device for more info.
@@ -835,16 +883,25 @@ impl ThinPool {
         pool_uuid: PoolUuid,
         backstore: &mut Backstore,
         new_thin_limit: u64,
-    ) -> StratisResult<Sectors> {
-        let new_meta_size = thin_metadata_size(
+    ) -> (bool, StratisResult<Sectors>) {
+        let mut should_save = false;
+
+        let new_meta_size = match thin_metadata_size(
             DATA_BLOCK_SIZE,
             self.thin_pool.data_dev().size(),
             new_thin_limit,
-        )?;
-
+        ) {
+            Ok(nms) => nms,
+            Err(e) => return (false, Err(e)),
+        };
         let current_meta_size = self.thin_pool.meta_dev().size();
+
+        if new_meta_size - current_meta_size > backstore.available_in_backstore() {
+            should_save |= self.set_error_mode();
+        }
+
         if new_meta_size != current_meta_size {
-            let (_, meta_ext) = ThinPool::extend_thin_sub_devices(
+            let ext = ThinPool::extend_thin_sub_devices(
                 pool_uuid,
                 &mut self.thin_pool,
                 backstore,
@@ -854,10 +911,11 @@ impl ThinPool {
                     &mut self.segments.meta_segments,
                     &mut self.segments.meta_spare_segments,
                 ),
-            )?;
-            Ok(meta_ext)
+            )
+            .map(|(_, meta_ext)| meta_ext);
+            (should_save | ext.is_ok(), ext)
         } else {
-            Ok(Sectors(0))
+            (should_save, Ok(Sectors(0)))
         }
     }
 
@@ -1313,15 +1371,20 @@ impl ThinPool {
         pool_uuid: PoolUuid,
         backstore: &mut Backstore,
         new_limit: u64,
-    ) -> StratisResult<()> {
+    ) -> (bool, StratisResult<()>) {
         if self.fs_limit >= new_limit {
-            Err(StratisError::Msg(
-                "New filesystem limit must be greater than the current limit".to_string(),
-            ))
+            (
+                false,
+                Err(StratisError::Msg(
+                    "New filesystem limit must be greater than the current limit".to_string(),
+                )),
+            )
         } else {
-            self.extend_thin_meta_device(pool_uuid, backstore, new_limit)?;
-            self.fs_limit = new_limit;
-            Ok(())
+            let (should_save, res) = self.extend_thin_meta_device(pool_uuid, backstore, new_limit);
+            if res.is_ok() {
+                self.fs_limit = new_limit;
+            }
+            (should_save, res.map(|_| ()))
         }
     }
 }
@@ -1761,8 +1824,8 @@ mod tests {
         // written above. If we attempt to update the UUID on the snapshot
         // without expanding the pool, the pool will go into out-of-data-space
         // (queue IO) mode, causing the test to fail.
-        pool.extend_thin_data_device(pool_uuid, &mut backstore)
-            .unwrap();
+        let (_, res) = pool.extend_thin_data_device(pool_uuid, &mut backstore);
+        res.unwrap();
 
         let snapshot_name = "test_snapshot";
         let (_, snapshot_filesystem) = pool
