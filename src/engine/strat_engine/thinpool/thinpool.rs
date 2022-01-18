@@ -41,8 +41,8 @@ pub const DEFAULT_FS_LIMIT: u64 = 100;
 
 // 1 MiB
 pub const DATA_BLOCK_SIZE: Sectors = Sectors(2 * IEC::Ki);
-// 2 GiB
-pub const DATA_LOWATER: DataBlocks = DataBlocks(2048);
+// 5 GiB
+pub const DATA_LOWATER: DataBlocks = DataBlocks(25 * IEC::Ki);
 
 // 50 GiB
 const DATA_ALLOC_SIZE: DataBlocks = DataBlocks(50 * IEC::Ki);
@@ -573,12 +573,15 @@ impl ThinPool {
             meta_dev,
             data_dev,
             thin_pool_save.data_block_size,
+            // This is a larger amount of free space than the actual amount of free
+            // space currently which will cause the value to be updated when the
+            // thinpool's check method is invoked.
             sectors_to_datablocks(data_dev_size),
-            vec![
-                "error_if_no_space".to_string(),
-                "no_discard_passdown".to_string(),
-                "skip_block_zeroing".to_string(),
-            ],
+            thin_pool_save
+                .feature_args
+                .iter()
+                .cloned()
+                .collect::<Vec<_>>(),
         )?;
 
         let (dm_name, dm_uuid) = format_flex_ids(pool_uuid, FlexRole::MetadataVolume);
@@ -787,13 +790,31 @@ impl ThinPool {
         backstore: &mut Backstore,
     ) -> StratisResult<(Sectors, Sectors)> {
         let available_size = backstore.available_in_backstore();
-        let (requested_data, requested_meta) = calculate_subdevice_extension(
+        let res = calculate_subdevice_extension(
             available_size,
             self.thin_pool.data_dev().size(),
             self.thin_pool.meta_dev().size(),
             datablocks_to_sectors(DATA_ALLOC_SIZE),
             self.fs_limit,
-        )?;
+        );
+        if let Err(StratisError::OutOfSpaceError(_)) = res {
+            if !self
+                .thin_pool
+                .table()
+                .table
+                .params
+                .feature_args
+                .contains("error_if_no_space")
+            {
+                if let Err(e) = self.thin_pool.error_if_no_space(get_dm()) {
+                    warn!(
+                        "Could not put thin pool into IO error mode on out of space conditions: {}",
+                        e
+                    );
+                }
+            }
+        }
+        let (requested_data, requested_meta) = res?;
 
         ThinPool::extend_thin_sub_devices(
             pool_uuid,
@@ -809,8 +830,6 @@ impl ThinPool {
     }
 
     /// Extend thinpool's meta dev. See extend_thin_sub_device for more info.
-    // TODO: Use this method for thin device limit.
-    #[allow(dead_code)]
     fn extend_thin_meta_device(
         &mut self,
         pool_uuid: PoolUuid,
@@ -861,7 +880,7 @@ impl ThinPool {
         let (meta_extend_size, meta_existing_segments, spare_meta_existing_segments) = meta_info;
 
         if data_extend_size == Sectors(0) && meta_extend_size == Sectors(0) {
-            info!("Determined that no device resizing is needed");
+            info!("No room left for device extension; switching pool to error when out of space");
             return Ok((Sectors(0), Sectors(0)));
         }
 
@@ -872,16 +891,12 @@ impl ThinPool {
                 "Attempting to extend thinpool data sub-device belonging to pool {} by {}",
                 pool_uuid, data_extend_size
             );
-            // FIXME: Need a better way in devicemapper-rs to expose mutable
-            // linear devices.
         }
         if meta_extend_size != Sectors(0) {
             info!(
                 "Attempting to extend thinpool meta sub-device belonging to pool {} by {}",
                 pool_uuid, meta_extend_size
             );
-            // FIXME: Need a better way in devicemapper-rs to expose mutable
-            // linear devices.
         }
 
         let device = backstore
@@ -1393,6 +1408,7 @@ impl Recordable<ThinPoolDevSave> for ThinPool {
     fn record(&self) -> ThinPoolDevSave {
         ThinPoolDevSave {
             data_block_size: self.thin_pool.data_block_size(),
+            feature_args: self.thin_pool.table().table.params.feature_args.clone(),
         }
     }
 }

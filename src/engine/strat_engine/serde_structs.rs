@@ -12,6 +12,8 @@
 // can convert to or from them when saving our current state, or
 // restoring state from saved metadata.
 
+use std::collections::HashSet;
+
 use serde::Serialize;
 
 use devicemapper::{Sectors, ThinDevId};
@@ -94,6 +96,7 @@ pub struct FlexDevsSave {
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ThinPoolDevSave {
     pub data_block_size: Sectors,
+    pub feature_args: HashSet<String>,
 }
 
 // Struct representing filesystem metadata. This metadata is not held in the
