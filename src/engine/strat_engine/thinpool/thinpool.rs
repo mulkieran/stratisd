@@ -579,9 +579,14 @@ impl ThinPool {
             sectors_to_datablocks(data_dev_size),
             thin_pool_save
                 .feature_args
-                .iter()
-                .cloned()
-                .collect::<Vec<_>>(),
+                .as_ref()
+                .map(|hs| hs.iter().cloned().collect::<Vec<_>>())
+                .unwrap_or_else(|| {
+                    vec![
+                        "no_discard_passdown".to_owned(),
+                        "skip_block_zeroing".to_owned(),
+                    ]
+                }),
         )?;
 
         let (dm_name, dm_uuid) = format_flex_ids(pool_uuid, FlexRole::MetadataVolume);
@@ -1471,7 +1476,7 @@ impl Recordable<ThinPoolDevSave> for ThinPool {
     fn record(&self) -> ThinPoolDevSave {
         ThinPoolDevSave {
             data_block_size: self.thin_pool.data_block_size(),
-            feature_args: self.thin_pool.table().table.params.feature_args.clone(),
+            feature_args: Some(self.thin_pool.table().table.params.feature_args.clone()),
         }
     }
 }

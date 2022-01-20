@@ -36,7 +36,9 @@ pub struct PoolSave {
     pub name: String,
     pub backstore: BackstoreSave,
     pub flex_devs: FlexDevsSave,
-    pub fs_limit: u64,
+    // TODO: This data type should no longer be optional in Stratis 4.0
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fs_limit: Option<u64>,
     pub thinpool_dev: ThinPoolDevSave,
 }
 
@@ -96,7 +98,9 @@ pub struct FlexDevsSave {
 #[derive(Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct ThinPoolDevSave {
     pub data_block_size: Sectors,
-    pub feature_args: HashSet<String>,
+    // TODO: This data type should no longer be optional in Stratis 4.0
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub feature_args: Option<HashSet<String>>,
 }
 
 // Struct representing filesystem metadata. This metadata is not held in the
