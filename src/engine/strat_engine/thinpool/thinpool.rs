@@ -565,8 +565,11 @@ impl ThinPool {
             segs_to_table(backstore_device, &data_segments),
         )?;
 
+        // TODO: Remove in stratisd 4.0.
+        let mut migrate = false;
+
         let data_dev_size = data_dev.size();
-        let thinpool_dev = ThinPoolDev::setup(
+        let mut thinpool_dev = ThinPoolDev::setup(
             get_dm(),
             &thinpool_name,
             Some(&thinpool_uuid),
@@ -582,12 +585,19 @@ impl ThinPool {
                 .as_ref()
                 .map(|hs| hs.iter().cloned().collect::<Vec<_>>())
                 .unwrap_or_else(|| {
+                    migrate = true;
                     vec![
                         "no_discard_passdown".to_owned(),
                         "skip_block_zeroing".to_owned(),
+                        "error_if_no_space".to_owned(),
                     ]
                 }),
         )?;
+
+        // TODO: Remove in stratisd 4.0.
+        if migrate {
+            thinpool_dev.queue_if_no_space(get_dm())?;
+        }
 
         let (dm_name, dm_uuid) = format_flex_ids(pool_uuid, FlexRole::MetadataVolume);
         let mdv_dev = LinearDev::setup(

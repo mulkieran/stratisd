@@ -230,7 +230,11 @@ impl StratPool {
             metadata.fs_limit.unwrap_or(DEFAULT_FS_LIMIT),
         )?;
 
-        let (needs_save, _) = thinpool.check(uuid, &mut backstore)?;
+        // Remove in stratisd 4.0
+        let mut needs_save =
+            metadata.fs_limit.is_none() || metadata.thinpool_dev.feature_args.is_none();
+
+        needs_save |= thinpool.check(uuid, &mut backstore)?.0;
 
         let metadata_size = backstore.datatier_metadata_size();
         let mut pool = StratPool {
