@@ -1597,12 +1597,11 @@ mod tests {
         };
     }
 
-    /// Test greedy allocation.
-    /// Verify that ThinPool::new() allocates nearly everything available.
-    /// Verify that meta and data devices are roughly in their correct
-    /// proportion.
-    /// FIXME: This is a temporary test; it should be removed when greedy
-    /// allocation is removed.
+    /// Test lazy allocation.
+    /// Verify that ThinPool::new() succeeds.
+    /// Verify that metadata device was properly sized.
+    /// Verify that the total allocated size is equal to the MDV region, the data
+    /// region, and the spare and in use metadata regions.
     fn test_lazy_allocation(paths: &[&Path]) {
         let pool_uuid = PoolUuid::new_v4();
 
@@ -1637,7 +1636,7 @@ mod tests {
     #[test]
     fn loop_test_lazy_allocation() {
         loopbacked::test_with_spec(
-            &loopbacked::DeviceLimits::Range(2, 3, Some(Sectors(52 * IEC::Mi))),
+            &loopbacked::DeviceLimits::Range(2, 3, Some(Sectors(4 * IEC::Mi))),
             test_lazy_allocation,
         );
     }
@@ -1645,7 +1644,7 @@ mod tests {
     #[test]
     fn real_test_lazy_allocation() {
         real::test_with_spec(
-            &real::DeviceLimits::AtLeast(2, Some(Sectors(52 * IEC::Mi)), None),
+            &real::DeviceLimits::AtLeast(2, Some(Sectors(4 * IEC::Mi)), None),
             test_lazy_allocation,
         );
     }
