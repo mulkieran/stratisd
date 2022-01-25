@@ -266,7 +266,7 @@ fn divide_space(
         fs_limit,
     )?;
 
-    let data_extended = data_size - current_data_size;
+    let data_extended = Sectors(data_size.saturating_sub(*current_data_size));
     debug!("Data extension: {}", data_extended);
     let meta_extended = Sectors(meta_size.saturating_sub(*current_meta_size));
     debug!("Meta extension: {}", meta_extended);
@@ -291,23 +291,23 @@ fn calculate_subdevice_extension(
     requested_space: Sectors,
     fs_limit: u64,
 ) -> StratisResult<(Sectors, Sectors)> {
-    if available_space / DATA_BLOCK_SIZE * DATA_BLOCK_SIZE == Sectors(0)
-        && requested_space > Sectors(0)
-    {
-        return Err(StratisError::OutOfSpaceError(format!(
-            "{} requested but no space is available",
-            requested_space
-        )));
-    }
-
     let requested_min = min(available_space, requested_space);
 
-    divide_space(
+    let (data, meta) = divide_space(
         requested_min,
         current_data_size,
         current_meta_size,
         fs_limit,
-    )
+    )?;
+
+    if data == Sectors(0) && meta == Sectors(0) {
+        Err(StratisError::OutOfSpaceError(format!(
+            "{} requested but no space is available",
+            requested_space
+        )))
+    } else {
+        Ok((data, meta))
+    }
 }
 
 pub struct ThinPoolSizeParams {
@@ -955,7 +955,7 @@ impl ThinPool {
         let (meta_extend_size, meta_existing_segments, spare_meta_existing_segments) = meta_info;
 
         if data_extend_size == Sectors(0) && meta_extend_size == Sectors(0) {
-            info!("No room left for device extension; switching pool to error when out of space");
+            info!("No room left for device extension");
             return Ok((Sectors(0), Sectors(0)));
         }
 
