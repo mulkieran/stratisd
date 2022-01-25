@@ -268,7 +268,7 @@ fn divide_space(
 
     let data_extended = data_size - current_data_size;
     debug!("Data extension: {}", data_extended);
-    let meta_extended = meta_size - current_meta_size;
+    let meta_extended = Sectors(meta_size.saturating_sub(*current_meta_size));
     debug!("Meta extension: {}", meta_extended);
 
     assert!(available_aligned >= data_extended + 2u64 * meta_extended);
@@ -911,7 +911,9 @@ impl ThinPool {
         };
         let current_meta_size = self.thin_pool.meta_dev().size();
 
-        if new_meta_size - current_meta_size > backstore.available_in_backstore() {
+        if Sectors(new_meta_size.saturating_sub(*current_meta_size))
+            > backstore.available_in_backstore()
+        {
             should_save |= self.set_error_mode();
         }
 
@@ -922,7 +924,7 @@ impl ThinPool {
                 backstore,
                 None,
                 (
-                    new_meta_size - current_meta_size,
+                    Sectors(new_meta_size.saturating_sub(*current_meta_size)),
                     &mut self.segments.meta_segments,
                     &mut self.segments.meta_spare_segments,
                 ),
