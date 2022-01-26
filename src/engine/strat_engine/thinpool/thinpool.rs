@@ -251,7 +251,6 @@ fn divide_space(
     let upper_data_aligned =
         (current_data_size + available_space) / DATA_BLOCK_SIZE * DATA_BLOCK_SIZE;
     let total_space = current_data_size + 2u64 * current_meta_size + available_space;
-    let available_aligned = available_space / DATA_BLOCK_SIZE * DATA_BLOCK_SIZE;
 
     debug!("Space for extension: {}", available_space);
     debug!("Current data device size: {}", current_data_size);
@@ -262,7 +261,7 @@ fn divide_space(
     let (data_size, meta_size) = search(
         total_space,
         upper_data_aligned,
-        Sectors(upper_data_aligned.saturating_sub(2u64 * *upper_limit_meta_size)),
+        upper_data_aligned - 2u64 * upper_limit_meta_size,
         fs_limit,
     )?;
 
@@ -271,7 +270,7 @@ fn divide_space(
     let meta_extended = Sectors(meta_size.saturating_sub(*current_meta_size));
     debug!("Meta extension: {}", meta_extended);
 
-    assert!(available_aligned >= data_extended + 2u64 * meta_extended);
+    assert!(available_space >= data_extended + 2u64 * meta_extended);
     assert_eq!(data_extended % DATA_BLOCK_SIZE, Sectors(0));
     Ok((data_extended, meta_extended))
 }
