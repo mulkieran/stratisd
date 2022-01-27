@@ -41,13 +41,30 @@ pub const DEFAULT_FS_LIMIT: u64 = 100;
 
 // 1 MiB
 pub const DATA_BLOCK_SIZE: Sectors = Sectors(2 * IEC::Ki);
-// 5 GiB
-pub const DATA_LOWATER: DataBlocks = DataBlocks(5 * IEC::Ki);
 
-// 50 GiB
-const DATA_ALLOC_SIZE: DataBlocks = DataBlocks(50 * IEC::Ki);
 // 16 MiB
 const INITIAL_MDV_SIZE: Sectors = Sectors(32 * IEC::Ki);
+
+// Use different constants for testing and application builds.
+use self::consts::{DATA_ALLOC_SIZE, DATA_LOWATER};
+#[cfg(not(test))]
+mod consts {
+    use super::{DataBlocks, IEC};
+
+    // 50 GiB
+    pub const DATA_ALLOC_SIZE: DataBlocks = DataBlocks(50 * IEC::Ki);
+    // 15 GiB
+    pub const DATA_LOWATER: DataBlocks = DataBlocks(15 * IEC::Ki);
+}
+#[cfg(test)]
+mod consts {
+    use super::{DataBlocks, IEC};
+
+    // 5 GiB
+    pub const DATA_ALLOC_SIZE: DataBlocks = DataBlocks(5 * IEC::Ki);
+    // 4 GiB
+    pub const DATA_LOWATER: DataBlocks = DataBlocks(4 * IEC::Ki);
+}
 
 fn sectors_to_datablocks(sectors: Sectors) -> DataBlocks {
     DataBlocks(sectors / DATA_BLOCK_SIZE)
@@ -489,9 +506,6 @@ impl ThinPool {
             // Either set the low water mark to the standard low water mark if
             // the device is larger than DATA_LOWATER or otherwise to half of the
             // capacity of the data device.
-            //
-            // With the current default initial size of the data device, this will
-            // always be half of 1 GiB (default data device size).
             min(
                 DATA_LOWATER,
                 DataBlocks((data_dev_size / DATA_BLOCK_SIZE) / 2),
@@ -1600,44 +1614,94 @@ mod tests {
 
     /// Test lazy allocation.
     /// Verify that ThinPool::new() succeeds.
-    /// Verify that metadata device was properly sized.
-    /// Verify that the total allocated size is equal to the MDV region, the data
-    /// region, and the spare and in use metadata regions.
+    /// Verify that the starting size is equal to the calculated initial size params.
+    /// Verify that check on an empty pool does not increase the allocation size.
+    /// Create filesystems on the thin pool until the low water mark is passed.
+    /// Verify that the data and metadata devices have been extended by the calculated
+    /// increase amount.
+    /// Verify that the total allocated size is equal to the size of all flex devices
+    /// added together.
+    /// Verify that the metadata device is the size equal to the output of
+    /// thin_metadata_size.
     fn test_lazy_allocation(paths: &[&Path]) {
         let pool_uuid = PoolUuid::new_v4();
 
         let mut backstore =
             Backstore::initialize(pool_uuid, paths, MDADataSize::default(), None).unwrap();
 
-        let mut pool = ThinPool::new(
-            pool_uuid,
-            &ThinPoolSizeParams::new(backstore.available_in_backstore()).unwrap(),
-            DATA_BLOCK_SIZE,
-            &mut backstore,
-        )
-        .unwrap();
+        let size = ThinPoolSizeParams::new(backstore.available_in_backstore()).unwrap();
+        let mut pool = ThinPool::new(pool_uuid, &size, DATA_BLOCK_SIZE, &mut backstore).unwrap();
+
+        let init_data_size = size.data_size();
+        let init_meta_size = size.meta_size();
+
+        assert_eq!(init_data_size, pool.thin_pool.data_dev().size());
+        assert_eq!(init_meta_size, pool.thin_pool.meta_dev().size());
 
         // This confirms that the check method does not increase the size until
         // the data low water mark is hit.
         pool.check(pool_uuid, &mut backstore).unwrap();
 
-        let meta_size = pool.thin_pool.meta_dev().size();
-        let data_size = pool.thin_pool.data_dev().size();
-        let mdv_size = INITIAL_MDV_SIZE;
+        assert_eq!(init_data_size, pool.thin_pool.data_dev().size());
+        assert_eq!(init_meta_size, pool.thin_pool.meta_dev().size());
+
+        let (data_ext, meta_ext) = calculate_subdevice_extension(
+            backstore.available_in_backstore(),
+            pool.thin_pool.data_dev().size(),
+            pool.thin_pool.meta_dev().size(),
+            datablocks_to_sectors(DATA_ALLOC_SIZE),
+            DEFAULT_FS_LIMIT,
+        )
+        .unwrap();
+
+        let mut i = 0;
+        loop {
+            pool.create_filesystem(
+                "testpool",
+                pool_uuid,
+                format!("testfs{}", i).as_str(),
+                Sectors(2 * IEC::Gi),
+            )
+            .unwrap();
+            i += 1;
+
+            // FIXME: Remove when check() updates pool usage.
+            pool.dump(&backstore);
+            let used = pool
+                .used
+                .as_ref()
+                .map(|u| datablocks_to_sectors(u.used_data))
+                .unwrap();
+
+            if pool.thin_pool.data_dev().size() - used < datablocks_to_sectors(DATA_LOWATER) {
+                assert!(pool.check(pool_uuid, &mut backstore).unwrap());
+                break;
+            }
+        }
+
+        assert_eq!(init_data_size + data_ext, pool.thin_pool.data_dev().size());
+        assert_eq!(init_meta_size + meta_ext, pool.thin_pool.meta_dev().size());
         assert_eq!(
-            meta_size,
-            thin_metadata_size(DATA_BLOCK_SIZE, data_size, DEFAULT_FS_LIMIT).unwrap()
+            pool.thin_pool.meta_dev().size(),
+            thin_metadata_size(
+                DATA_BLOCK_SIZE,
+                pool.thin_pool.data_dev().size(),
+                DEFAULT_FS_LIMIT,
+            )
+            .unwrap()
         );
         assert_eq!(
-            mdv_size + data_size + 2u64 * meta_size,
-            backstore.datatier_allocated_size()
+            backstore.datatier_allocated_size(),
+            pool.thin_pool.data_dev().size()
+                + pool.thin_pool.meta_dev().size() * 2u64
+                + pool.mdv.device().size()
         );
     }
 
     #[test]
     fn loop_test_lazy_allocation() {
         loopbacked::test_with_spec(
-            &loopbacked::DeviceLimits::Range(2, 3, Some(Sectors(4 * IEC::Mi))),
+            &loopbacked::DeviceLimits::Range(2, 3, Some(Sectors(10 * IEC::Mi))),
             test_lazy_allocation,
         );
     }
@@ -1645,7 +1709,7 @@ mod tests {
     #[test]
     fn real_test_lazy_allocation() {
         real::test_with_spec(
-            &real::DeviceLimits::AtLeast(2, Some(Sectors(4 * IEC::Mi)), None),
+            &real::DeviceLimits::AtLeast(2, Some(Sectors(10 * IEC::Mi)), None),
             test_lazy_allocation,
         );
     }
