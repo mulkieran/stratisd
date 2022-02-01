@@ -21,9 +21,7 @@ use crate::{
             backstore::{Backstore, StratBlockDev},
             metadata::MDADataSize,
             serde_structs::{FlexDevsSave, PoolSave, Recordable},
-            thinpool::{
-                StratFilesystem, ThinPool, ThinPoolSizeParams, DATA_BLOCK_SIZE, DEFAULT_FS_LIMIT,
-            },
+            thinpool::{StratFilesystem, ThinPool, ThinPoolSizeParams, DATA_BLOCK_SIZE},
         },
         types::{
             ActionAvailability, BlockDevTier, Clevis, Compare, CreateAction, DeleteAction, DevUuid,
@@ -227,12 +225,11 @@ impl StratPool {
             &metadata.thinpool_dev,
             &metadata.flex_devs,
             &backstore,
-            metadata.fs_limit.unwrap_or(DEFAULT_FS_LIMIT),
         )?;
 
         // Remove in stratisd 4.0
-        let mut needs_save =
-            metadata.fs_limit.is_none() || metadata.thinpool_dev.feature_args.is_none();
+        let mut needs_save = metadata.thinpool_dev.fs_limit.is_none()
+            || metadata.thinpool_dev.feature_args.is_none();
 
         needs_save |= thinpool.check(uuid, &mut backstore)?.0;
 
@@ -317,7 +314,6 @@ impl StratPool {
             backstore: self.backstore.record(),
             flex_devs: self.thin_pool.record(),
             thinpool_dev: self.thin_pool.record(),
-            fs_limit: Some(self.thin_pool.fs_limit()),
         }
     }
 

@@ -37,7 +37,7 @@ use crate::{
 
 // Maximum number of thin devices (filesystems) allowed on a thin pool.
 // NOTE: This will eventually become a default configurable by the user.
-pub const DEFAULT_FS_LIMIT: u64 = 100;
+const DEFAULT_FS_LIMIT: u64 = 100;
 
 // 1 MiB
 pub const DATA_BLOCK_SIZE: Sectors = Sectors(2 * IEC::Ki);
@@ -552,7 +552,6 @@ impl ThinPool {
         thin_pool_save: &ThinPoolDevSave,
         flex_devs: &FlexDevsSave,
         backstore: &Backstore,
-        fs_limit: u64,
     ) -> StratisResult<ThinPool> {
         let mdv_segments = flex_devs.meta_dev.to_vec();
         let meta_segments = flex_devs.thin_meta_dev.to_vec();
@@ -672,7 +671,7 @@ impl ThinPool {
             thin_pool_status: digest,
             allocated_size: backstore.datatier_allocated_size(),
             used: status_to_usage(thin_pool_status),
-            fs_limit,
+            fs_limit: thin_pool_save.fs_limit.unwrap_or(DEFAULT_FS_LIMIT),
         })
     }
 
@@ -709,9 +708,8 @@ impl ThinPool {
 
         let old_state = self.cached();
 
-        if let Some(usage) = self.used.as_ref().cloned() {
-            if self.thin_pool.data_dev().size() - datablocks_to_sectors(usage.used_data)
-                < datablocks_to_sectors(DATA_LOWATER)
+        if let Some(usage) = self.data_used() {
+            if self.thin_pool.data_dev().size() - usage < datablocks_to_sectors(DATA_LOWATER)
                 && !self.out_of_alloc_space()
             {
                 let amount_allocated = match self.extend_thin_data_device(pool_uuid, backstore) {
@@ -1502,6 +1500,7 @@ impl Recordable<ThinPoolDevSave> for ThinPool {
         ThinPoolDevSave {
             data_block_size: self.thin_pool.data_block_size(),
             feature_args: Some(self.thin_pool.table().table.params.feature_args.clone()),
+            fs_limit: Some(self.fs_limit),
         }
     }
 }
@@ -1665,16 +1664,10 @@ mod tests {
             .unwrap();
             i += 1;
 
-            // FIXME: Remove when check() updates pool usage.
-            pool.dump(&backstore);
-            let used = pool
-                .used
-                .as_ref()
-                .map(|u| datablocks_to_sectors(u.used_data))
-                .unwrap();
+            let used = pool.data_used().unwrap();
 
             if pool.thin_pool.data_dev().size() - used < datablocks_to_sectors(DATA_LOWATER) {
-                assert!(pool.check(pool_uuid, &mut backstore).unwrap());
+                assert!(pool.check(pool_uuid, &mut backstore).unwrap().0);
                 break;
             }
         }
@@ -2000,15 +1993,8 @@ mod tests {
 
         retry_operation!(pool.teardown());
 
-        let pool = ThinPool::setup(
-            pool_name,
-            pool_uuid,
-            &thinpoolsave,
-            &flexdevs,
-            &backstore,
-            DEFAULT_FS_LIMIT,
-        )
-        .unwrap();
+        let pool =
+            ThinPool::setup(pool_name, pool_uuid, &thinpoolsave, &flexdevs, &backstore).unwrap();
 
         assert_eq!(&*pool.get_filesystem_by_uuid(fs_uuid).unwrap().0, name2);
     }
@@ -2084,7 +2070,6 @@ mod tests {
             &thinpooldevsave,
             &pool.record(),
             &backstore,
-            DEFAULT_FS_LIMIT,
         )
         .unwrap();
 
@@ -2139,7 +2124,6 @@ mod tests {
             &thinpooldevsave,
             &flexdevs,
             &backstore,
-            DEFAULT_FS_LIMIT,
         )
         .unwrap();
 
