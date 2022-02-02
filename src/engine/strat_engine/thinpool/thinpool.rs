@@ -319,7 +319,7 @@ fn calculate_subdevice_extension(
     if data == Sectors(0) && meta == Sectors(0) {
         Err(StratisError::OutOfSpaceError(format!(
             "{} requested but no space is available",
-            requested_space
+            requested_min
         )))
     } else {
         Ok((data, meta))
@@ -910,8 +910,6 @@ impl ThinPool {
         backstore: &mut Backstore,
         new_thin_limit: u64,
     ) -> (bool, StratisResult<Sectors>) {
-        let mut should_save = false;
-
         let new_meta_size = match thin_metadata_size(
             DATA_BLOCK_SIZE,
             self.thin_pool.data_dev().size(),
@@ -925,10 +923,14 @@ impl ThinPool {
         if Sectors(new_meta_size.saturating_sub(*current_meta_size))
             > backstore.available_in_backstore()
         {
-            should_save |= self.set_error_mode();
-        }
-
-        if new_meta_size != current_meta_size {
+            (
+                self.set_error_mode(),
+                Err(StratisError::Msg(
+                    "Not enough unallocated space available on the pool to extend metadata device"
+                        .to_string(),
+                )),
+            )
+        } else if new_meta_size != current_meta_size {
             let ext = ThinPool::extend_thin_sub_devices(
                 pool_uuid,
                 &mut self.thin_pool,
@@ -941,9 +943,9 @@ impl ThinPool {
                 ),
             )
             .map(|(_, meta_ext)| meta_ext);
-            (should_save | ext.is_ok(), ext)
+            (ext.is_ok(), ext)
         } else {
-            (should_save, Ok(Sectors(0)))
+            (false, Ok(Sectors(0)))
         }
     }
 
