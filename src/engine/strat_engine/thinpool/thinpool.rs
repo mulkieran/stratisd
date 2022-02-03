@@ -1666,10 +1666,12 @@ mod tests {
             .unwrap();
             i += 1;
 
-            let used = pool.data_used().unwrap();
-
-            if pool.thin_pool.data_dev().size() - used < datablocks_to_sectors(DATA_LOWATER) {
-                assert!(pool.check(pool_uuid, &mut backstore).unwrap().0);
+            let init_used = pool.data_used().unwrap();
+            let init_data_size = pool.thin_pool.data_dev().size();
+            let (changed, diff) = pool.check(pool_uuid, &mut backstore).unwrap();
+            if init_data_size - init_used < datablocks_to_sectors(DATA_LOWATER) {
+                assert!(changed);
+                assert!(diff.allocated_size.is_changed());
                 break;
             }
         }
