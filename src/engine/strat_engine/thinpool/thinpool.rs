@@ -511,7 +511,6 @@ impl ThinPool {
                 DataBlocks((data_dev_size / DATA_BLOCK_SIZE) / 2),
             ),
             vec![
-                "error_if_no_space".to_string(),
                 "no_discard_passdown".to_string(),
                 "skip_block_zeroing".to_string(),
             ],
