@@ -84,7 +84,7 @@ jobs:
         run: >
           RUST_LOG=stratisd=debug
           STRATISD=/usr/libexec/stratisd
-          eKIP_DUPLICATE_NAMES_TEST=${{ matrix.skip_value }}
+          SKIP_DUPLICATE_NAMES_TEST=${{ matrix.skip_value }}
           PYTHONPATH=./src
           make udev-tests
         working-directory: ./tests/client-dbus
