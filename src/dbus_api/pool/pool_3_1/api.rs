@@ -21,7 +21,7 @@ where
 {
     f.property::<u64, _>(consts::POOL_FS_LIMIT_PROP, ())
         .access(Access::ReadWrite)
-        .emits_changed(EmitsChangedSignal::True)
+        .emits_changed(EmitsChangedSignal::False)
         .on_get(get_pool_fs_limit)
         .on_set(set_pool_fs_limit)
 }
