@@ -204,24 +204,8 @@ impl fmt::Display for ThinPoolStatusDigest {
 
 /// Returns the determined size of the data and metadata devices.
 ///
-/// This method implements something similar to a binary search. The upper and lower
-/// limits are data device sizes.  The upper limit should be the total available
-/// space (total_space) as this leaves no room for metadata. We can assume the data
-/// device will never be larger than this. The lower limit should be
-/// total_size - meta_size_for_total_size. Because the metadata size subtracted from
-/// the total size makes the data size smaller, the metadata size may also shrink
-/// so we can assume this is the lower bound.
-///
-/// For each recursive iteration, this method determines what the metadata size is
-/// for a data size halfway between the upper and lower limit. If the halfway point
-/// total for data and metadata size is above the total space, it becomes the new
-/// upper limit. If it is below, it becomes the new lower limit. Once the two
-/// metadata sizes converge, the lower limit is returned as the upper limit and the
-/// corresponding metadata size added up is, by definition, always larger than the
-/// total size.
-///
-/// This method will always return values that leave less than one data block free,
-/// thus optimizing storage usage.
+/// This method will always return optimal values that leave as little space as
+/// possible free, thus optimizing storage usage.
 ///
 /// Because this method needs to make room for the spare metadata space as well,
 /// you will see the metadata size multiplied by 2.
@@ -229,31 +213,22 @@ impl fmt::Display for ThinPoolStatusDigest {
 /// This method is recursive.
 fn search(
     total_space: Sectors,
-    upper_limit: Sectors,
     lower_limit: Sectors,
     fs_limit: u64,
 ) -> StratisResult<(Sectors, Sectors)> {
-    let upper_aligned = upper_limit / DATA_BLOCK_SIZE * DATA_BLOCK_SIZE;
-    let lower_aligned = lower_limit / DATA_BLOCK_SIZE * DATA_BLOCK_SIZE;
-
-    let (upper_meta_size, lower_meta_size) = (
-        thin_metadata_size(DATA_BLOCK_SIZE, upper_aligned, fs_limit)?,
-        thin_metadata_size(DATA_BLOCK_SIZE, lower_aligned, fs_limit)?,
-    );
-
-    let diff = upper_limit - lower_limit;
-    let half_diff = diff / 2u64;
-    let half_limit = lower_aligned + half_diff;
-    let half_aligned = half_limit / DATA_BLOCK_SIZE * DATA_BLOCK_SIZE;
-
-    let half_meta_size = thin_metadata_size(DATA_BLOCK_SIZE, half_aligned, fs_limit)?;
-
-    if upper_meta_size == lower_meta_size && half_aligned == lower_aligned {
-        Ok((lower_aligned, lower_meta_size))
-    } else if total_space <= half_aligned + 2u64 * half_meta_size {
-        search(total_space, half_aligned, lower_aligned, fs_limit)
-    } else {
-        search(total_space, upper_aligned, half_aligned, fs_limit)
+    let mut lower_limit_tmp = lower_limit;
+    let lower_limit_meta = thin_metadata_size(DATA_BLOCK_SIZE, lower_limit_tmp, fs_limit)?;
+    loop {
+        if lower_limit_tmp
+            + DATA_BLOCK_SIZE
+            + 2u64
+                * thin_metadata_size(DATA_BLOCK_SIZE, lower_limit_tmp + DATA_BLOCK_SIZE, fs_limit)?
+            > total_space
+        {
+            return Ok((lower_limit, lower_limit_meta));
+        } else {
+            lower_limit_tmp += DATA_BLOCK_SIZE;
+        }
     }
 }
 
@@ -274,7 +249,6 @@ fn divide_space(
 
     search(
         total_space,
-        upper_data_aligned,
         upper_data_aligned - 2u64 * upper_limit_meta_size,
         fs_limit,
     )
