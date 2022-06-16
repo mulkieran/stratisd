@@ -213,22 +213,37 @@ impl fmt::Display for ThinPoolStatusDigest {
 /// This method is recursive.
 fn search(
     total_space: Sectors,
-    lower_limit: Sectors,
+    upper_limit: DataBlocks,
+    lower_limit: DataBlocks,
     fs_limit: u64,
 ) -> StratisResult<(Sectors, Sectors)> {
-    let mut lower_limit_tmp = lower_limit;
-    let lower_limit_meta = thin_metadata_size(DATA_BLOCK_SIZE, lower_limit_tmp, fs_limit)?;
-    loop {
-        if lower_limit_tmp
-            + DATA_BLOCK_SIZE
-            + 2u64
-                * thin_metadata_size(DATA_BLOCK_SIZE, lower_limit_tmp + DATA_BLOCK_SIZE, fs_limit)?
-            > total_space
-        {
-            return Ok((lower_limit, lower_limit_meta));
-        } else {
-            lower_limit_tmp += DATA_BLOCK_SIZE;
-        }
+    let diff = upper_limit - lower_limit;
+    let half = lower_limit + diff / 2u64 + diff % 2u64;
+    let half_meta = thin_metadata_size(DATA_BLOCK_SIZE, datablocks_to_sectors(half), fs_limit)?;
+
+    if lower_limit + DataBlocks(1) == upper_limit {
+        let upper_limit_sectors = datablocks_to_sectors(upper_limit);
+        let lower_limit_sectors = datablocks_to_sectors(lower_limit);
+        let upper_meta = thin_metadata_size(DATA_BLOCK_SIZE, upper_limit_sectors, fs_limit)?;
+        let lower_meta = thin_metadata_size(DATA_BLOCK_SIZE, lower_limit_sectors, fs_limit)?;
+        trace!(
+            "Upper data: {}, upper meta: {}, lower data: {}, lower meta: {}, total space: {}",
+            upper_limit_sectors,
+            upper_meta,
+            lower_limit_sectors,
+            lower_meta,
+            total_space
+        );
+        assert!(upper_limit_sectors + upper_meta * 2u64 > total_space);
+        assert!(lower_limit_sectors + lower_meta * 2u64 <= total_space);
+        Ok((
+            lower_limit_sectors,
+            thin_metadata_size(DATA_BLOCK_SIZE, lower_limit_sectors, fs_limit)?,
+        ))
+    } else if datablocks_to_sectors(half) + half_meta * 2u64 > total_space {
+        search(total_space, half, lower_limit, fs_limit)
+    } else {
+        search(total_space, upper_limit, half, fs_limit)
     }
 }
 
@@ -241,15 +256,28 @@ fn divide_space(
     current_meta_size: Sectors,
     fs_limit: u64,
 ) -> StratisResult<(Sectors, Sectors)> {
-    let upper_data_aligned =
-        (current_data_size + available_space) / DATA_BLOCK_SIZE * DATA_BLOCK_SIZE;
+    let upper_data_aligned = sectors_to_datablocks(current_data_size + available_space)
+        + if available_space % DATA_BLOCK_SIZE == Sectors(0) {
+            DataBlocks(0)
+        } else {
+            DataBlocks(1)
+        };
+    let upper_limit_meta_size = thin_metadata_size(
+        DATA_BLOCK_SIZE,
+        datablocks_to_sectors(upper_data_aligned),
+        fs_limit,
+    )?;
+    let lower_data_aligned = sectors_to_datablocks(
+        datablocks_to_sectors(upper_data_aligned) - 2u64 * upper_limit_meta_size,
+    );
     let total_space = current_data_size + 2u64 * current_meta_size + available_space;
 
-    let upper_limit_meta_size = thin_metadata_size(DATA_BLOCK_SIZE, upper_data_aligned, fs_limit)?;
+    assert!(datablocks_to_sectors(upper_data_aligned) + upper_limit_meta_size * 2u64 > total_space);
 
     search(
         total_space,
-        upper_data_aligned - 2u64 * upper_limit_meta_size,
+        upper_data_aligned,
+        lower_data_aligned,
         fs_limit,
     )
 }
