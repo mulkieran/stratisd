@@ -211,6 +211,9 @@ impl fmt::Display for ThinPoolStatusDigest {
 /// you will see the metadata size multiplied by 2.
 ///
 /// This method is recursive.
+///
+/// Precondition: upper_limit + 2 * thin_metadata_size(upper_limit) > total_space
+/// Precondition: lower_limit + 2 * thin_metadata_size(upper_limit) <= total_space
 fn search(
     total_space: Sectors,
     upper_limit: DataBlocks,
@@ -256,6 +259,19 @@ fn divide_space(
     current_meta_size: Sectors,
     fs_limit: u64,
 ) -> StratisResult<(Sectors, Sectors)> {
+    // We add the expression at the end because sectors_to_datablocks is a floor
+    // function. If the available space is not aligned to DATA_BLOCK_SIZE, the
+    // remainder will be discarded.
+    //
+    // The below expression is added because if the remainder is zero, the
+    // total_space is guaranteed to be less than the total size calculated by
+    // the upper limit. The value of upper_data_aligned will be exact, not
+    // rounded down at all and so adding the additional metadata space guarantees
+    // that it will be larger than total_space. However, if the remainder is
+    // non-zero, we round up to the nearest data block which will always be
+    // a valid upper limit.
+    //
+    // This is required to satisfy the preconditions of search.
     let upper_data_aligned = sectors_to_datablocks(current_data_size + available_space)
         + if available_space % DATA_BLOCK_SIZE == Sectors(0) {
             DataBlocks(0)
