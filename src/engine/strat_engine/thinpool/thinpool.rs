@@ -2404,4 +2404,29 @@ mod tests {
     fn real_test_set_device() {
         real::test_with_spec(&real::DeviceLimits::AtLeast(2, None, None), test_set_device);
     }
+
+    proptest! {
+        #[test]
+        fn test_search(fs_limit in (1..100_000_u64)) {
+            let total_space = Sectors(104_857_600);
+            let (data_size, meta_size) = search(total_space, sectors_to_datablocks(total_space) + DataBlocks(1), DataBlocks(0), fs_limit).unwrap();
+
+            // data_size is always divisible by the size of a data block
+            prop_assert_eq!(datablocks_to_sectors(sectors_to_datablocks(data_size)), data_size);
+
+            // the sum of the space to be allocated is no greater than the
+            // total space.
+            prop_assert!(data_size + 2u64 * meta_size <= total_space);
+
+
+            prop_assert!(meta_size < data_size);
+
+            // The solution is optimal; adding one more block to the data
+            // allocation causes the sum of the data and metadata device
+            // sizes to exceed the total.
+            let too_big_data_size = data_size + DATA_BLOCK_SIZE;
+            let too_big_meta_size = thin_metadata_size(DATA_BLOCK_SIZE, too_big_data_size, fs_limit).unwrap();
+            prop_assert!(too_big_data_size + 2u64 * too_big_meta_size > total_space);
+        }
+    }
 }
