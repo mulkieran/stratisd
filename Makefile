@@ -31,6 +31,7 @@ endif
 MIN_FEATURES = --no-default-features --features engine,min
 SYSTEMD_FEATURES = --no-default-features --features engine,min,systemd_compat
 EXTRAS_FEATURES =  --no-default-features --features engine,extras,min
+UDEV_FEATURES = --no-default-features --features udev_scripts
 
 DENY = -D warnings -D future-incompatible -D unused -D rust_2018_idioms -D nonstandard_style
 
@@ -198,8 +199,6 @@ build:
 	PKG_CONFIG_ALLOW_CROSS=1 \
 	RUSTFLAGS="${DENY}" \
 	cargo build ${RELEASE_FLAG} ${TARGET_ARGS}
-	@# purge the stratis-str-cmp and stratis-base32-decode binaries which are built statically with build-udev-utils
-	@rm -f target/$(PROFILEDIR)/{stratis-str-cmp*,stratis-base32-decode*}
 
 ## Build the stratisd test suite
 build-tests:
@@ -227,9 +226,10 @@ build-udev-utils:
 	RUSTFLAGS="${DENY} ${STATIC_FLAG}" \
 	cargo build ${RELEASE_FLAG} \
 	--bin=stratis-str-cmp --bin=stratis-base32-decode \
-	--target=${STATIC_TARGET}
-	@ldd target/${STATIC_TARGET}/${PROFILEDIR}/stratis-str-cmp|grep --quiet --silent "statically linked" || (echo "stratis-str-cmp is not statically linked" && exit 1)
-	@ldd target/${STATIC_TARGET}/${PROFILEDIR}/stratis-base32-decode|grep --quiet --silent "statically linked" || (echo "stratis-base32-decode is not statically linked" && exit 1)
+	${UDEV_FEATURES} \
+	${TARGET_ARGS}
+	@ldd target/${PROFILEDIR}/stratis-str-cmp|grep --quiet --silent "statically linked" || (echo "stratis-str-cmp is not statically linked" && exit 1)
+	@ldd target/${PROFILEDIR}/stratis-base32-decode|grep --quiet --silent "statically linked" || (echo "stratis-base32-decode is not statically linked" && exit 1)
 
 ## Build the stratis-dumpmetadata program
 stratis-dumpmetadata:
