@@ -2,7 +2,6 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use clap::{Arg, Command};
 use std::{
     env,
     error::Error,
@@ -30,24 +29,14 @@ fn string_compare(arg1: &str, arg2: &str) {
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let args = env::args().collect::<Vec<_>>();
+    let mut args = env::args();
 
-    let parser = Command::new("stratis-str-cmp")
-        .arg(
-            Arg::new("left")
-                .help("First string to compare")
-                .required(true),
-        )
-        .arg(
-            Arg::new("right")
-                .help("Second string to compare")
-                .required(true),
-        );
-    let matches = parser.get_matches_from(&args);
-    string_compare(
-        matches.value_of("left").expect("required argument"),
-        matches.value_of("right").expect("required argument"),
-    );
+    let _ = args.next();
+
+    let left = args.next().unwrap();
+    let right = args.next().unwrap();
+
+    string_compare(&left, &right);
 
     Ok(())
 }

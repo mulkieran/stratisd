@@ -2,7 +2,6 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-use clap::{Arg, Command};
 use data_encoding::BASE32_NOPAD;
 use std::{
     env,
@@ -28,20 +27,13 @@ fn base32_decode(var_name: &str, base32_str: &str) -> Result<(), Box<dyn Error>>
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
-    let args = env::args().collect::<Vec<_>>();
+    let mut args = env::args();
 
-    let parser = Command::new("stratis-base32-decode")
-        .arg(Arg::new("key").help("Key for output string").required(true))
-        .arg(
-            Arg::new("value")
-                .help("value to be decoded from base32 encoded sequence")
-                .required(true),
-        );
-    let matches = parser.get_matches_from(&args);
-    base32_decode(
-        matches.value_of("key").expect("required argument"),
-        matches.value_of("value").expect("required argument"),
-    )?;
+    let _ = args.next();
+    let key = args.next().unwrap();
+    let value = args.next().unwrap();
+
+    base32_decode(&key, &value)?;
 
     Ok(())
 }
