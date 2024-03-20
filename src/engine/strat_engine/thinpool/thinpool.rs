@@ -73,6 +73,14 @@ mod consts {
     pub const DATA_LOWATER: DataBlocks = DataBlocks(4 * IEC::Ki);
 }
 
+#[derive(strum_macros::AsRefStr)]
+#[strum(serialize_all = "snake_case")]
+enum FeatureArgs {
+    ErrorIfNoSpace,
+    NoDiscardPassdown,
+    SkipBlockZeroing,
+}
+
 fn sectors_to_datablocks(sectors: Sectors) -> DataBlocks {
     DataBlocks(sectors / DATA_BLOCK_SIZE)
 }
@@ -400,8 +408,8 @@ impl ThinPool {
                 DataBlocks((data_dev_size / DATA_BLOCK_SIZE) / 2),
             ),
             vec![
-                "no_discard_passdown".to_string(),
-                "skip_block_zeroing".to_string(),
+                FeatureArgs::NoDiscardPassdown.as_ref().to_string(),
+                FeatureArgs::SkipBlockZeroing.as_ref().to_string(),
             ],
         )?;
 
@@ -487,9 +495,9 @@ impl ThinPool {
                 .unwrap_or_else(|| {
                     migrate = true;
                     vec![
-                        "no_discard_passdown".to_owned(),
-                        "skip_block_zeroing".to_owned(),
-                        "error_if_no_space".to_owned(),
+                        FeatureArgs::NoDiscardPassdown.as_ref().to_string(),
+                        FeatureArgs::SkipBlockZeroing.as_ref().to_string(),
+                        FeatureArgs::ErrorIfNoSpace.as_ref().to_string(),
                     ]
                 }),
         )?;
@@ -888,7 +896,7 @@ impl ThinPool {
             .table
             .params
             .feature_args
-            .contains("error_if_no_space")
+            .contains(FeatureArgs::ErrorIfNoSpace.as_ref())
     }
 
     /// Extend thinpool's data dev.
