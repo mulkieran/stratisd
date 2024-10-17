@@ -292,8 +292,7 @@ fn all_tang_configs_have_url_trust_info(
         &|premises| {
             premises
                 .into_iter()
-                .collect::<StratisResult<Vec<_>>>()
-                .map(|premises| premises.iter().all(|x| *x))
+                .try_fold(true, |acc, prem| prem.map(|p| p && acc))
         },
     )
 }
