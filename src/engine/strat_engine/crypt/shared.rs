@@ -210,7 +210,7 @@ fn traverse_clevis_config<T>(
     recursion_limit: u64,
     tang_func: &dyn Fn(&Map<String, Value>) -> StratisResult<T>,
     tpm2_func: &dyn Fn(&Map<String, Value>) -> StratisResult<T>,
-    sss_func: &dyn Fn(StratisResult<Vec<T>>) -> StratisResult<T>,
+    sss_func: &dyn Fn(Vec<StratisResult<T>>) -> StratisResult<T>,
 ) -> StratisResult<T> {
     if recursion_limit == 0 {
         return Err(StratisError::Msg(
@@ -241,7 +241,7 @@ fn traverse_clevis_config<T>(
                                 sss_func,
                             )
                         })
-                        .collect::<StratisResult<Vec<_>>>(),
+                        .collect::<Vec<_>>(),
                 )
             } else {
                 Err(StratisError::Msg(
@@ -289,7 +289,12 @@ fn all_tang_configs_have_url_trust_info(
                 .unwrap_or(false))
         },
         &|_| Ok(true),
-        &|res| res.map(|res| res.iter().all(|x| *x)),
+        &|premises| {
+            premises
+                .into_iter()
+                .collect::<StratisResult<Vec<_>>>()
+                .map(|premises| premises.iter().all(|x| *x))
+        },
     )
 }
 
