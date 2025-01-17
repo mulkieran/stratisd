@@ -96,7 +96,7 @@ fn key_desc_to_passphrase(key_description: &KeyDescription) -> StratisResult<Siz
     }
 }
 
-// Precondition: if clevis_pass.is_none(), device must have the volume key stored
+// Precondition: if pass.is_none(), device must have the volume key stored
 // in memory (this is automatically done when formatting a LUKS2 device).
 pub fn add_keyring_keyslot(
     device: &mut CryptDevice,
@@ -110,7 +110,7 @@ pub fn add_keyring_keyslot(
                 device
                     .keyslot_handle()
                     .add_by_passphrase(None, pass.as_ref(), key.as_ref()),
-                "Failed to initialize keyslot with existing Clevis key"
+                "Failed to initialize keyslot with provided key in keyring"
             )
         }
         Some(Either::Right(kd)) => {
