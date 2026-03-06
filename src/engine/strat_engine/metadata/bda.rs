@@ -47,6 +47,7 @@ impl BDA {
         blkdev_size: BlockdevSize,
         initialization_time: DateTime<Utc>,
     ) -> BDA {
+        assert!((*identifiers.pool_uuid).as_bytes()[6] >> 4 == 4);
         let header = StaticHeader::new(
             sigblock_version,
             identifiers,

@@ -213,6 +213,7 @@ impl BlockDevMgr<v2::StratBlockDev> {
         devices: UnownedDevices,
         mda_data_size: MDADataSize,
     ) -> StratisResult<BlockDevMgr<v2::StratBlockDev>> {
+        assert!((*pool_uuid).as_bytes()[6] >> 4 == 4);
         Ok(BlockDevMgr::new(
             initialize_devices(devices, pool_uuid, mda_data_size)?,
             None,

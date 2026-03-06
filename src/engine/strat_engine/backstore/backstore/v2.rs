@@ -523,6 +523,7 @@ impl Backstore {
         encryption_info: Option<&InputEncryptionInfo>,
         integrity_spec: ValidatedIntegritySpec,
     ) -> StratisResult<Backstore> {
+        assert!((*pool_uuid).as_bytes()[6] >> 4 == 4);
         let data_tier = DataTier::<StratBlockDev>::new(
             BlockDevMgr::<StratBlockDev>::initialize(pool_uuid, devices, mda_data_size)?,
             integrity_spec,

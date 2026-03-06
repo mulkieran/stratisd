@@ -71,6 +71,7 @@ pub struct StratisIdentifiers {
 
 impl StratisIdentifiers {
     pub fn new(pool_uuid: PoolUuid, device_uuid: DevUuid) -> StratisIdentifiers {
+        assert!((*pool_uuid).as_bytes()[6] >> 4 == 4);
         StratisIdentifiers {
             pool_uuid,
             device_uuid,
@@ -147,6 +148,7 @@ impl StaticHeader {
         blkdev_size: BlockdevSize,
         initialization_time: DateTime<Utc>,
     ) -> StaticHeader {
+        assert!((*identifiers.pool_uuid).as_bytes()[6] >> 4 == 4);
         StaticHeader {
             blkdev_size,
             sigblock_version,

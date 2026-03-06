@@ -801,6 +801,7 @@ pub fn initialize_devices(
     pool_uuid: PoolUuid,
     mda_data_size: MDADataSize,
 ) -> StratisResult<Vec<v2::StratBlockDev>> {
+    assert!((*pool_uuid).as_bytes()[6] >> 4 == 4);
     fn initialize_stratis_metadata(
         devnode: DevicePath,
         devno: Device,
@@ -809,6 +810,7 @@ pub fn initialize_devices(
         sizes: (MDADataSize, BlockdevSize),
         id_wwn: &Option<StratisResult<String>>,
     ) -> StratisResult<v2::StratBlockDev> {
+        assert!((*pool_uuid).as_bytes()[6] >> 4 == 4);
         let (mda_data_size, data_size) = sizes;
         let mut f = OpenOptions::new().write(true).open(&*devnode)?;
 
@@ -880,6 +882,7 @@ pub fn initialize_devices(
         pool_uuid: PoolUuid,
         mda_data_size: MDADataSize,
     ) -> StratisResult<v2::StratBlockDev> {
+        assert!((*pool_uuid).as_bytes()[6] >> 4 == 4);
         let dev_uuid = DevUuid::new_v4();
         let (devno, blockdev_size) = (dev_info.devno, dev_info.size.sectors());
 
@@ -905,6 +908,7 @@ pub fn initialize_devices(
         pool_uuid: PoolUuid,
         mda_data_size: MDADataSize,
     ) -> StratisResult<Vec<v2::StratBlockDev>> {
+        assert!((*pool_uuid).as_bytes()[6] >> 4 == 4);
         let mut initialized_blockdevs: Vec<v2::StratBlockDev> = Vec::new();
         for dev_info in devices.inner {
             match initialize_one(&dev_info, pool_uuid, mda_data_size) {
