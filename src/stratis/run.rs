@@ -97,6 +97,13 @@ pub fn run(sim: bool) -> StratisResult<()> {
                 Arc::clone(&engine),
                 udev_receiver,
             );
+
+            // Set up signal-handlers immediately before select!, otherwise
+            // signal-handlers may be overridden by dependent C libraries
+            // during their own initialization steps.
+            let mut interrupt_signal = signal(SignalKind::interrupt())?;
+            let mut terminate_signal = signal(SignalKind::terminate())?;
+
             let join_dm = dm_event_thread(
                 #[cfg(feature = "dbus_enabled")]
                 Arc::clone(&connection),
@@ -117,11 +124,6 @@ pub fn run(sim: bool) -> StratisResult<()> {
             );
             let vks = load_vks(engine, key_recv);
 
-            // Set up signal-handlers immediately before select!, otherwise
-            // signal-handlers may be overridden by dependent C libraries
-            // during their own initialization steps.
-            let mut interrupt_signal = signal(SignalKind::interrupt())?;
-            let mut terminate_signal = signal(SignalKind::terminate())?;
             select! {
                 res = join_udev => {
                     if let Err(e) = res {
