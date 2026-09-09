@@ -1,3 +1,24 @@
+stratisd 3.10.0
+===============
+Recommended development platform for Python development: Fedora 44
+
+- Increase D-Bus revision from r9 to r10:
+  https://github.com/stratis-storage/stratisd/pull/4058
+
+- Do not suspend before loading newly created cache device:
+  https://github.com/stratis-storage/stratisd/pull/4089
+
+- Turn on LTO when compiling statically built executables:
+  https://github.com/stratis-storage/stratisd/pull/4086
+
+- Tidies and Maintenance:
+  https://github.com/stratis-storage/stratisd/pull/4088
+  https://github.com/stratis-storage/stratisd/pull/4087
+  https://github.com/stratis-storage/stratisd/pull/4085
+  https://github.com/stratis-storage/stratisd/pull/4084
+  https://github.com/stratis-storage/stratisd/pull/4078
+
+
 stratisd 3.9.2
 ==============
 Recommended development platform for Python development: Fedora 43
