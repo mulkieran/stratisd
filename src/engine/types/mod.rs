@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{self, AsRefStr, EnumString, FromRepr, VariantNames};
 use uuid::Uuid;
 #[cfg(feature = "dbus_enabled")]
-use zbus::zvariant::{Type, Value};
+use zbus::{zvariant::Type, Variant};
 
 use devicemapper::{Bytes, Sectors, IEC};
 
@@ -154,7 +154,7 @@ pub enum BlockDevTier {
 
 #[cfg_attr(
     feature = "dbus_enabled",
-    derive(Type, Value),
+    derive(Type, Variant),
     zvariant(signature = "s")
 )]
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Serialize, Deserialize)]
@@ -209,26 +209,26 @@ pub enum ReportType {
     StoppedPools,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Serialize)]
 pub struct PoolDevice {
     pub devnode: PathBuf,
     pub uuid: DevUuid,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Serialize)]
 pub struct LockedPoolInfo {
     pub info: PoolEncryptionInfo,
     pub devices: Vec<PoolDevice>,
 }
 
-#[derive(Default, Debug, Eq, PartialEq)]
+#[derive(Default, Debug, Eq, PartialEq, Serialize)]
 pub struct LockedPoolsInfo {
     pub locked: HashMap<PoolUuid, LockedPoolInfo>,
     pub name_to_uuid: HashMap<Name, PoolUuid>,
     pub uuid_to_name: HashMap<PoolUuid, Name>,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Serialize)]
 pub struct StoppedPoolInfo {
     pub info: Option<PoolEncryptionInfo>,
     pub devices: Vec<PoolDevice>,
@@ -240,14 +240,14 @@ pub struct StoppedPoolInfo {
     pub devices_complete: bool,
 }
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq, Serialize)]
 pub struct Features {
     pub encryption: bool,
     pub key_description_enabled: bool,
     pub clevis_enabled: bool,
 }
 
-#[derive(Default, Debug, Eq, PartialEq)]
+#[derive(Default, Debug, Eq, PartialEq, Serialize)]
 pub struct StoppedPoolsInfo {
     pub stopped: HashMap<PoolUuid, StoppedPoolInfo>,
     pub partially_constructed: HashMap<PoolUuid, StoppedPoolInfo>,
@@ -376,7 +376,7 @@ impl Deref for DevicePath {
 }
 
 /// Represents what actions this pool can accept.
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, strum_macros::Display)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Clone, Serialize, strum_macros::Display)]
 pub enum ActionAvailability {
     /// Full set of actions may be taken
     #[strum(serialize = "fully_operational")]
@@ -491,7 +491,7 @@ impl UuidOrConflict {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, FromRepr)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, FromRepr)]
 #[repr(u8)]
 pub enum StratSigblockVersion {
     V1 = 1,
